@@ -4,7 +4,6 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
 const cors = require('cors');
-const cron = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 
@@ -147,6 +146,96 @@ async function gracefulShutdown(signal) {
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// ============================================================
+// IST DAILY SCHEDULER
+// ============================================================
+const IST_TIMEZONE = 'Asia/Kolkata';
+let lastAutoSendDateIST = null;
+
+function getISTTimeParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: IST_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+  return { hour, minute, hhmm: `${hour}:${minute}` };
+}
+
+function getISTDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: IST_TIMEZONE }).format(date);
+}
+
+function normalizeTimeHHMM(value) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  const match24 = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    const h = Number(match24[1]);
+    const m = Number(match24[2]);
+    if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+  }
+  return null;
+}
+
+async function getSchedulerConfig() {
+  const { data, error } = await supabase.from('whatsapp_config').select('*').single();
+  if (error) {
+    console.warn('[SCHEDULER] Could not load whatsapp_config:', error.message);
+    return null;
+  }
+  return data;
+}
+
+async function tickScheduler() {
+  if (whatsappStatus !== 'connected') return;
+
+  const config = await getSchedulerConfig();
+  if (!config?.enabled) return;
+
+  const target = normalizeTimeHHMM(config.send_time);
+  if (!target) {
+    console.warn('[SCHEDULER] Invalid send_time in Supabase (use 24h HH:MM, e.g. 15:59):', config.send_time);
+    return;
+  }
+
+  const now = getISTTimeParts();
+  const todayIST = getISTDateKey();
+  if (now.hhmm !== target) return;
+  if (lastAutoSendDateIST === todayIST) return;
+
+  lastAutoSendDateIST = todayIST;
+  const groupName = config.group_name?.trim() || 'Tirtam';
+  console.log(`\n[SCHEDULER] Auto send at ${now.hhmm} IST → "${groupName}"`);
+  const result = await sendSummaryToGroup(groupName);
+  console.log('[SCHEDULER] Result:', result.success ? `Sent to ${result.groupName}` : result.error);
+
+  if (!result.success) {
+    lastAutoSendDateIST = null;
+  }
+}
+
+async function startScheduler() {
+  const config = await getSchedulerConfig();
+  const target = normalizeTimeHHMM(config?.send_time);
+
+  if (config?.enabled && target) {
+    console.log(`Auto-send enabled: ${target} IST → group "${config.group_name || 'Tirtam'}"`);
+  } else if (config?.enabled) {
+    console.warn('Auto-send enabled but send_time is invalid:', config?.send_time);
+  } else {
+    console.log('WhatsApp automation is disabled. Enable it in the dashboard.');
+  }
+
+  console.log(`Scheduler checks every 30s using timezone ${IST_TIMEZONE}`);
+  setInterval(tickScheduler, 30_000);
+  tickScheduler();
+}
 
 // ============================================================
 // TASK SCANNER + SUMMARY GENERATOR
@@ -369,11 +458,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get('/status', (req, res) => {
+app.get('/status', async (req, res) => {
+  const config = await getSchedulerConfig();
   res.json({
     whatsapp: whatsappStatus,
     connectedNumber,
     hasQr: !!qrCodeData,
+    scheduler: {
+      timezone: IST_TIMEZONE,
+      enabled: config?.enabled ?? false,
+      sendTime: config?.send_time ?? null,
+      sendTimeNormalized: normalizeTimeHHMM(config?.send_time),
+      groupName: config?.group_name ?? null,
+      lastSent: config?.last_sent ?? null,
+      currentTimeIST: getISTTimeParts(),
+      lastAutoSendDateIST,
+    },
   });
 });
 
@@ -443,30 +543,6 @@ app.get('/groups', async (req, res) => {
 });
 
 // ============================================================
-// DAILY CRON JOB
-// ============================================================
-async function setupCron() {
-  const { data: config } = await supabase.from('whatsapp_config').select('*').single();
-  const sendTime = config?.send_time || '09:00';
-  const [hour, minute] = sendTime.split(':');
-  const groupName = config?.group_name || 'Tirtam';
-
-  if (config?.enabled) {
-    const cronExpr = `${minute} ${hour} * * *`;
-    cron.schedule(cronExpr, async () => {
-      const { data: latest } = await supabase.from('whatsapp_config').select('group_name').single();
-      const cronGroupName = latest?.group_name?.trim() || groupName;
-      console.log(`\n[CRON] Running daily summary at ${new Date().toISOString()} → "${cronGroupName}"`);
-      const result = await sendSummaryToGroup(cronGroupName);
-      console.log('[CRON] Result:', result.success ? `Sent to ${result.groupName}` : result.error);
-    });
-    console.log(`Daily cron scheduled at ${sendTime} for group "${groupName}"`);
-  } else {
-    console.log('WhatsApp automation is disabled. Enable it in the dashboard.');
-  }
-}
-
-// ============================================================
 // START
 // ============================================================
 app.listen(PORT, '0.0.0.0', () => {
@@ -481,5 +557,5 @@ app.listen(PORT, '0.0.0.0', () => {
     console.error('WhatsApp client failed to start:', err.message);
     whatsappStatus = 'error';
   });
-  setupCron();
+  startScheduler();
 });
