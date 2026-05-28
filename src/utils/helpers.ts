@@ -144,23 +144,61 @@ function wasCompletedYesterday(task: Task): boolean {
   return isYesterday(new Date(task.updatedAt));
 }
 
+function isWebsiteTask(task: Task): boolean {
+  return task.department === 'Website';
+}
+
+function formatTaskFocusBlock(task: Task): string {
+  return `📌 ${task.name} · 🏢 ${task.department}\n⏳ Due: ${formatFocusDueDate(task.deadline)} ${formatStatusWithEmoji(task.status)}\n\n`;
+}
+
+function formatWebsiteTasksSection(
+  websiteTasks: Task[],
+  getOwnerFullName: (id: string) => string
+): string {
+  if (websiteTasks.length === 0) return '';
+
+  const byOwner = new Map<string, Task[]>();
+  for (const task of websiteTasks) {
+    const list = byOwner.get(task.owner) || [];
+    list.push(task);
+    byOwner.set(task.owner, list);
+  }
+
+  const owners = [...byOwner.entries()].sort((a, b) =>
+    getOwnerFullName(a[0]).localeCompare(getOwnerFullName(b[0]))
+  );
+
+  let section = `🌐 Website Tasks\n\n`;
+  for (const [ownerId, ownerTasks] of owners) {
+    section += `👤 ${getOwnerFullName(ownerId)}\n`;
+    const sorted = [...ownerTasks].sort(compareTasksByStatusThenPriority);
+    for (const task of sorted) {
+      section += formatTaskFocusBlock(task);
+    }
+  }
+  return section;
+}
+
 export function generateWhatsAppSummary(tasks: Task[], employees: { id: string; name: string; avatar?: string }[]): string {
   const getOwnerFullName = (id: string) => employees.find((e) => e.id === id)?.name || 'Unassigned';
 
   const hasOwner = (t: Task) => t.owner && t.owner.trim() !== '';
   const focusTasks = tasks.filter((t) => hasOwner(t) && t.status !== 'Completed');
-  const pending = tasks.filter((t) => !hasOwner(t) && t.status !== 'Completed').length;
+  const mainFocusTasks = focusTasks.filter((t) => !isWebsiteTask(t));
+  const websiteFocusTasks = focusTasks.filter(isWebsiteTask);
+  const upcoming = tasks.filter((t) => !hasOwner(t) && t.status !== 'Completed').length;
   const inProgress = tasks.filter((t) => t.status === 'In Progress').length;
   const notStarted = tasks.filter((t) => t.status === 'Not started').length;
   const completedYesterday = tasks.filter(wasCompletedYesterday).length;
 
-  const sorted = [...focusTasks].sort(compareTasksByStatusThenPriority);
+  const sorted = [...mainFocusTasks].sort(compareTasksByStatusThenPriority);
 
   let msg = `⚠️ Tirtam Daily Ops Summary\n\n`;
   msg += `📊 Today's Snapshot\n`;
   msg += `🟡 In Progress: ${inProgress}\n`;
   msg += `⚪ Not Started: ${notStarted}\n`;
-  msg += `pending: ${pending}\n`;
+  msg += `📋 Upcoming: ${upcoming}\n`;
   msg += `✅ Completed Yesterday: ${completedYesterday}\n\n`;
   msg += `🔥 Today's Focus\n\n`;
 
@@ -169,10 +207,13 @@ export function generateWhatsAppSummary(tasks: Task[], employees: { id: string; 
   } else {
     for (const t of sorted) {
       msg += `👤 ${getOwnerFullName(t.owner)}\n`;
-      msg += `📌 ${t.name}\n`;
-      msg += `🏢 ${t.department}\n`;
-      msg += `⏳ Due: ${formatFocusDueDate(t.deadline)} ${formatStatusWithEmoji(t.status)}\n\n`;
+      msg += formatTaskFocusBlock(t);
     }
+  }
+
+  const websiteSection = formatWebsiteTasksSection(websiteFocusTasks, getOwnerFullName);
+  if (websiteSection) {
+    msg += `\n${websiteSection}`;
   }
 
   return msg.trim();

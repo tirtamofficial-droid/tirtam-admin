@@ -166,7 +166,7 @@ async function scanTasksAndGenerateSummary() {
 
   const hasOwner = (t) => t.owner && t.owner.trim() !== '';
   const focusTasks = allTasks.filter((t) => hasOwner(t) && t.status !== 'Completed');
-  const pending = allTasks.filter((t) => !hasOwner(t) && t.status !== 'Completed').length;
+  const upcoming = allTasks.filter((t) => !hasOwner(t) && t.status !== 'Completed').length;
   const inProgress = allTasks.filter((t) => t.status === 'In Progress').length;
   const notStarted = allTasks.filter((t) => t.status === 'Not started').length;
 
@@ -211,19 +211,54 @@ async function scanTasksAndGenerateSummary() {
     }
   };
 
-  const sorted = [...focusTasks].sort((a, b) => {
+  const isWebsiteTask = (t) => t.department === 'Website';
+
+  const formatTaskFocusBlock = (t) =>
+    `📌 ${t.name} · 🏢 ${t.department}\n⏳ Due: ${formatFocusDueDate(t.deadline)} ${formatStatusWithEmoji(t.status)}\n\n`;
+
+  const sortTasksByStatusThenPriority = (a, b) => {
     const statusOrder = { 'In Progress': 0, 'Not started': 1, Blocked: 2, Review: 3, Completed: 4 };
     const statusCmp = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
     if (statusCmp !== 0) return statusCmp;
     const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
     return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
-  });
+  };
+
+  const formatWebsiteTasksSection = (websiteTasks) => {
+    if (websiteTasks.length === 0) return '';
+
+    const byOwner = new Map();
+    for (const task of websiteTasks) {
+      const list = byOwner.get(task.owner) || [];
+      list.push(task);
+      byOwner.set(task.owner, list);
+    }
+
+    const owners = [...byOwner.entries()].sort((a, b) =>
+      getOwnerFullName(a[0]).localeCompare(getOwnerFullName(b[0]))
+    );
+
+    let section = `🌐 Website Tasks\n\n`;
+    for (const [ownerId, ownerTasks] of owners) {
+      section += `👤 ${getOwnerFullName(ownerId)}\n`;
+      const sortedOwnerTasks = [...ownerTasks].sort(sortTasksByStatusThenPriority);
+      for (const t of sortedOwnerTasks) {
+        section += formatTaskFocusBlock(t);
+      }
+    }
+    return section;
+  };
+
+  const mainFocusTasks = focusTasks.filter((t) => !isWebsiteTask(t));
+  const websiteFocusTasks = focusTasks.filter(isWebsiteTask);
+
+  const sorted = [...mainFocusTasks].sort(sortTasksByStatusThenPriority);
 
   let msg = `⚠️ Tirtam Daily Ops Summary\n\n`;
   msg += `📊 Today's Snapshot\n`;
   msg += `🟡 In Progress: ${inProgress}\n`;
   msg += `⚪ Not Started: ${notStarted}\n`;
-  msg += `pending: ${pending}\n`;
+  msg += `📋 Upcoming: ${upcoming}\n`;
   msg += `✅ Completed Yesterday: ${completedYesterday}\n\n`;
   msg += `🔥 Today's Focus\n\n`;
 
@@ -232,21 +267,25 @@ async function scanTasksAndGenerateSummary() {
   } else {
     for (const t of sorted) {
       msg += `👤 ${getOwnerFullName(t.owner)}\n`;
-      msg += `📌 ${t.name}\n`;
-      msg += `🏢 ${t.department}\n`;
-      msg += `⏳ Due: ${formatFocusDueDate(t.deadline)} ${formatStatusWithEmoji(t.status)}\n\n`;
+      msg += formatTaskFocusBlock(t);
     }
+  }
+
+  const websiteSection = formatWebsiteTasksSection(websiteFocusTasks);
+  if (websiteSection) {
+    msg += `\n${websiteSection}`;
   }
 
   return {
     summary: msg.trim(),
     stats: {
       total: allTasks.length,
-      pending,
+      upcoming,
       completedYesterday,
       inProgress,
       notStarted,
       focusTasks: focusTasks.length,
+      websiteTasks: websiteFocusTasks.length,
     },
   };
 }
