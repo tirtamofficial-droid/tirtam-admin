@@ -1,4 +1,4 @@
-import { format, formatDistanceToNow, isPast, isToday, isTomorrow, addDays } from 'date-fns';
+import { format, formatDistanceToNow, isPast, isToday, isTomorrow, isYesterday, addDays } from 'date-fns';
 import type { Task, Department, TaskStatus, Priority } from '../types';
 
 export function generateId(): string {
@@ -120,55 +120,60 @@ export function getCompletionPercentage(tasks: Task[]): number {
   return Math.round((completed / tasks.length) * 100);
 }
 
-function formatWhatsAppDueDate(deadline: string): string {
+function formatFocusDueDate(deadline: string): string {
   if (!deadline) return 'No date';
   const dl = new Date(deadline);
-  if (isToday(dl)) return 'Today';
-  if (isPast(dl)) return 'Overdue';
-  const day = dl.getDate();
-  const suffix =
-    day % 10 === 1 && day !== 11 ? 'st'
-    : day % 10 === 2 && day !== 12 ? 'nd'
-    : day % 10 === 3 && day !== 13 ? 'rd'
-    : 'th';
-  return `${day}${suffix} ${format(dl, 'MMMM')}`;
+  if (isToday(dl)) return 'TODAY';
+  if (isPast(dl)) return 'OVERDUE';
+  return `${dl.getDate()} ${format(dl, 'MMMM')}`;
+}
+
+function formatStatusWithEmoji(status: TaskStatus): string {
+  switch (status) {
+    case 'In Progress': return '🔄 In Progress';
+    case 'Not started': return '⚠️ Not Started';
+    case 'Blocked': return '🚫 Blocked';
+    case 'Review': return '👀 Review';
+    case 'Completed': return '✅ Completed';
+    default: return status;
+  }
+}
+
+function wasCompletedYesterday(task: Task): boolean {
+  if (task.status !== 'Completed') return false;
+  return isYesterday(new Date(task.updatedAt));
 }
 
 export function generateWhatsAppSummary(tasks: Task[], employees: { id: string; name: string; avatar?: string }[]): string {
   const getOwnerFullName = (id: string) => employees.find((e) => e.id === id)?.name || 'Unassigned';
-  const getOwnerEmoji = (id: string) => {
-    const avatar = employees.find((e) => e.id === id)?.avatar?.trim();
-    if (avatar && /\p{Extended_Pictographic}/u.test(avatar)) return avatar;
-    return '👤';
-  };
 
   const hasOwner = (t: Task) => t.owner && t.owner.trim() !== '';
-  const activeTasks = tasks.filter((t) => hasOwner(t) && t.status !== 'Completed');
+  const focusTasks = tasks.filter((t) => hasOwner(t) && t.status !== 'Completed');
   const pending = tasks.filter((t) => !hasOwner(t) && t.status !== 'Completed').length;
-  const completed = tasks.filter((t) => t.status === 'Completed').length;
   const inProgress = tasks.filter((t) => t.status === 'In Progress').length;
   const notStarted = tasks.filter((t) => t.status === 'Not started').length;
+  const completedYesterday = tasks.filter(wasCompletedYesterday).length;
 
-  const sorted = [...activeTasks].sort(compareTasksByStatusThenPriority);
+  const sorted = [...focusTasks].sort(compareTasksByStatusThenPriority);
 
-  let msg = `📊 *Stats*\n`;
-  msg += `📋 *Pending:* ${pending}\n`;
-  msg += `✅ *Completed:* ${completed}\n`;
-  msg += `🔄 *In Progress:* ${inProgress}\n`;
-  msg += `⏳ *Not started:* ${notStarted}\n\n`;
-  msg += `📋 *Today's tasks:*\n\n`;
+  let msg = `⚠️ Tirtam Daily Ops Summary\n\n`;
+  msg += `📊 Today's Snapshot\n`;
+  msg += `🟡 In Progress: ${inProgress}\n`;
+  msg += `⚪ Not Started: ${notStarted}\n`;
+  msg += `pending: ${pending}\n`;
+  msg += `✅ Completed Yesterday: ${completedYesterday}\n\n`;
+  msg += `🔥 Today's Focus\n\n`;
 
   if (sorted.length === 0) {
-    msg += `No tasks in progress.`;
+    msg += `No active tasks assigned.`;
   } else {
     for (const t of sorted) {
-      const ownerEmoji = getOwnerEmoji(t.owner);
-      msg += `${ownerEmoji} *${getOwnerFullName(t.owner)}:* ${t.name}\n`;
-      msg += `*Department:* ${t.department}. *Priority:* ${t.priority}\n`;
-      msg += `*Due date:* ${formatWhatsAppDueDate(t.deadline)}. *Status:* ${t.status}\n\n`;
+      msg += `👤 ${getOwnerFullName(t.owner)}\n`;
+      msg += `📌 ${t.name}\n`;
+      msg += `🏢 ${t.department}\n`;
+      msg += `⏳ Due: ${formatFocusDueDate(t.deadline)} ${formatStatusWithEmoji(t.status)}\n\n`;
     }
   }
 
-  msg += `_Sent by Tirtam OS_`;
   return msg.trim();
 }

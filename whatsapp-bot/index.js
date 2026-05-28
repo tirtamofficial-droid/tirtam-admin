@@ -163,16 +163,10 @@ async function scanTasksAndGenerateSummary() {
     const emp = employees.find(e => e.id === id);
     return emp ? emp.name : 'Unassigned';
   };
-  const getOwnerEmoji = (id) => {
-    const avatar = employees.find(e => e.id === id)?.avatar?.trim();
-    if (avatar && /\p{Extended_Pictographic}/u.test(avatar)) return avatar;
-    return '👤';
-  };
 
   const hasOwner = (t) => t.owner && t.owner.trim() !== '';
-  const activeTasks = allTasks.filter((t) => hasOwner(t) && t.status !== 'Completed');
+  const focusTasks = allTasks.filter((t) => hasOwner(t) && t.status !== 'Completed');
   const pending = allTasks.filter((t) => !hasOwner(t) && t.status !== 'Completed').length;
-  const completed = allTasks.filter((t) => t.status === 'Completed').length;
   const inProgress = allTasks.filter((t) => t.status === 'In Progress').length;
   const notStarted = allTasks.filter((t) => t.status === 'Not started').length;
 
@@ -181,24 +175,43 @@ async function scanTasksAndGenerateSummary() {
     dl.getDate() === now.getDate() &&
     dl.getMonth() === now.getMonth() &&
     dl.getFullYear() === now.getFullYear();
+  const isYesterdayDate = (d) => {
+    const date = new Date(d);
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return (
+      date.getDate() === yesterday.getDate() &&
+      date.getMonth() === yesterday.getMonth() &&
+      date.getFullYear() === yesterday.getFullYear()
+    );
+  };
   const isPastDate = (dl) => dl < now && !isTodayDate(dl);
 
-  const formatDueDateOrdinal = (deadline) => {
+  const completedYesterday = allTasks.filter(
+    (t) => t.status === 'Completed' && t.updated_at && isYesterdayDate(t.updated_at)
+  ).length;
+
+  const formatFocusDueDate = (deadline) => {
     if (!deadline) return 'No date';
     const dl = new Date(deadline);
-    if (isTodayDate(dl)) return 'Today';
-    if (isPastDate(dl)) return 'Overdue';
-    const day = dl.getDate();
-    const suffix =
-      day % 10 === 1 && day !== 11 ? 'st'
-      : day % 10 === 2 && day !== 12 ? 'nd'
-      : day % 10 === 3 && day !== 13 ? 'rd'
-      : 'th';
+    if (isTodayDate(dl)) return 'TODAY';
+    if (isPastDate(dl)) return 'OVERDUE';
     const month = dl.toLocaleDateString('en-IN', { month: 'long' });
-    return `${day}${suffix} ${month}`;
+    return `${dl.getDate()} ${month}`;
   };
 
-  const sorted = [...activeTasks].sort((a, b) => {
+  const formatStatusWithEmoji = (status) => {
+    switch (status) {
+      case 'In Progress': return '🔄 In Progress';
+      case 'Not started': return '⚠️ Not Started';
+      case 'Blocked': return '🚫 Blocked';
+      case 'Review': return '👀 Review';
+      case 'Completed': return '✅ Completed';
+      default: return status;
+    }
+  };
+
+  const sorted = [...focusTasks].sort((a, b) => {
     const statusOrder = { 'In Progress': 0, 'Not started': 1, Blocked: 2, Review: 3, Completed: 4 };
     const statusCmp = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
     if (statusCmp !== 0) return statusCmp;
@@ -206,35 +219,34 @@ async function scanTasksAndGenerateSummary() {
     return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
   });
 
-  let msg = `📊 *Stats*\n`;
-  msg += `📋 *Pending:* ${pending}\n`;
-  msg += `✅ *Completed:* ${completed}\n`;
-  msg += `🔄 *In Progress:* ${inProgress}\n`;
-  msg += `⏳ *Not started:* ${notStarted}\n\n`;
-  msg += `📋 *Today's tasks:*\n\n`;
+  let msg = `⚠️ Tirtam Daily Ops Summary\n\n`;
+  msg += `📊 Today's Snapshot\n`;
+  msg += `🟡 In Progress: ${inProgress}\n`;
+  msg += `⚪ Not Started: ${notStarted}\n`;
+  msg += `pending: ${pending}\n`;
+  msg += `✅ Completed Yesterday: ${completedYesterday}\n\n`;
+  msg += `🔥 Today's Focus\n\n`;
 
   if (sorted.length === 0) {
-    msg += `No tasks in progress.`;
+    msg += `No active tasks assigned.`;
   } else {
     for (const t of sorted) {
-      const ownerEmoji = getOwnerEmoji(t.owner);
-      msg += `${ownerEmoji} *${getOwnerFullName(t.owner)}:* ${t.name}\n`;
-      msg += `*Department:* ${t.department}. *Priority:* ${t.priority}\n`;
-      msg += `*Due date:* ${formatDueDateOrdinal(t.deadline)}. *Status:* ${t.status}\n\n`;
+      msg += `👤 ${getOwnerFullName(t.owner)}\n`;
+      msg += `📌 ${t.name}\n`;
+      msg += `🏢 ${t.department}\n`;
+      msg += `⏳ Due: ${formatFocusDueDate(t.deadline)} ${formatStatusWithEmoji(t.status)}\n\n`;
     }
   }
 
-  msg += `_Sent by Tirtam OS_`;
-
   return {
-    summary: msg,
+    summary: msg.trim(),
     stats: {
       total: allTasks.length,
       pending,
-      completed,
+      completedYesterday,
       inProgress,
       notStarted,
-      activeTasks: activeTasks.length,
+      focusTasks: focusTasks.length,
     },
   };
 }
