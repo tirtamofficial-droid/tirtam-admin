@@ -1,0 +1,5 @@
+2026/05/28-12:14:14.101 3231a Creating DB /Users/samarthrai/Tirtam/whatsapp-bot/whatsapp-session/session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb since it was missing.
+2026/05/28-12:14:14.104 3231a Reusing MANIFEST /Users/samarthrai/Tirtam/whatsapp-bot/whatsapp-session/session/Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/05/28-12:15:03.891 3231a Level-0 table #5: started
+2026/05/28-12:15:03.940 3231a Level-0 table #5: 1078662 bytes OK
+2026/05/28-12:15:03.948 3231a Delete type=0 #3
