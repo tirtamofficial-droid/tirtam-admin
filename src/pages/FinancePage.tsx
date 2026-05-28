@@ -308,7 +308,7 @@ export default function FinancePage() {
           <IndianRupee size={18} className="text-white" />
         </div>
         <div>
-          <h1 className="text-[20px] font-semibold text-zinc-900 tracking-tight leading-none">Finance</h1>
+          <h1 className="text-[20px] font-semibold text-zinc-900 tracking-tight leading-none">Expense</h1>
           <p className="text-[13px] text-zinc-400 mt-0.5">Track vendor payments and operational expenses</p>
         </div>
       </div>

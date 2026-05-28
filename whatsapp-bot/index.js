@@ -1,14 +1,12 @@
 const fs = require('fs');
 const path = require('path');
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
-const https = require('https');
-const http = require('http');
 
 const CHROMIUM_LOCK_FILES = new Set([
   'SingletonLock',
@@ -150,24 +148,15 @@ async function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// ============================================================
-// LOGO
-// ============================================================
-const TIRTAM_LOGO_URL = 'https://www.tirtam.com/cdn/shop/files/Pi7-Image-Cropper.png?v=1779194222&width=360';
-
-function fetchImageAsBase64(url) {
-  return new Promise((resolve, reject) => {
-    const proto = url.startsWith('https') ? https : http;
-    proto.get(url, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return fetchImageAsBase64(res.headers.location).then(resolve).catch(reject);
-      }
-      const chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
-      res.on('end', () => resolve(Buffer.concat(chunks).toString('base64')));
-      res.on('error', reject);
-    }).on('error', reject);
-  });
+function isDueToday(deadline) {
+  if (!deadline) return false;
+  const d = new Date(deadline);
+  const now = new Date();
+  return (
+    d.getDate() === now.getDate() &&
+    d.getMonth() === now.getMonth() &&
+    d.getFullYear() === now.getFullYear()
+  );
 }
 
 // ============================================================
@@ -187,25 +176,12 @@ async function scanTasksAndGenerateSummary() {
   };
 
   const hasOwner = (t) => t.owner && t.owner.trim() !== '';
-  const tasks = allTasks.filter(hasOwner);
-  const unassigned = allTasks.filter(t => !hasOwner(t));
+  const todayTasks = allTasks.filter(
+    (t) => t.status !== 'Completed' && hasOwner(t) && isDueToday(t.deadline)
+  );
 
   const now = new Date();
-
-  const pending = tasks.filter(t => t.status === 'Pending');
-  const completed = tasks.filter(t => t.status === 'Completed');
-  const active = tasks.filter(t => t.status !== 'Completed');
-
-  const highPriority = active.filter(t => t.priority === 'Critical' || t.priority === 'High');
-  const mediumPriority = active.filter(t => t.priority === 'Medium');
-  const lowPriority = active.filter(t => t.priority === 'Low');
-
-  const formatDueDate = (deadline) => {
-    if (!deadline) return 'No date';
-    const dl = new Date(deadline);
-    if (dl < now && active.some(t => t.deadline === deadline)) return 'Overdue';
-    return dl.toLocaleDateString('en-IN', { month: 'long', day: 'numeric' });
-  };
+  const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' });
 
   const priorityIcon = (p) => {
     if (p === 'Critical' || p === 'High') return '🔴';
@@ -213,36 +189,27 @@ async function scanTasksAndGenerateSummary() {
     return '🟢';
   };
 
-  let msg = `⚠️ *Tirtam Daily Operations Summary*\n\n`;
-  msg += `📌 Pending Tasks: ${pending.length}\n`;
-  msg += `✅ Completed Tasks: ${completed.length}\n`;
-  msg += `🔴 High Priority: ${highPriority.length}\n`;
-  msg += `🟡 Medium Priority: ${mediumPriority.length}\n`;
-  msg += `🟢 Low Priority: ${lowPriority.length}\n`;
+  let msg = `📅 *Tirtam — Today's Tasks*\n${dateStr}\n\n`;
+  msg += `📋 *Tasks due today:* ${todayTasks.length}\n`;
 
-  const taskList = active.sort((a, b) => {
-    const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-    return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
-  });
+  if (todayTasks.length === 0) {
+    msg += `\nNo tasks due today.`;
+  } else {
+    const taskList = todayTasks.sort((a, b) => {
+      const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+      return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
+    });
 
-  for (const t of taskList) {
-    const icon = priorityIcon(t.priority);
-    const ownerName = getOwnerName(t.owner);
-    const dueDate = formatDueDate(t.deadline);
+    for (const t of taskList) {
+      const icon = priorityIcon(t.priority);
+      const ownerName = getOwnerName(t.owner);
 
-    msg += `\n---\n\n`;
-    msg += `${icon} *Owner:* ${ownerName}\n`;
-    msg += `*Task:* ${t.name}\n`;
-    msg += `*Department:* ${t.department}\n`;
-    msg += `*Priority:* ${t.priority}\n`;
-    msg += `*Due Date:* ${dueDate}\n`;
-    msg += `*Status:* ${t.status}`;
-  }
-
-  if (unassigned.length > 0) {
-    msg += `\n\n---\n\n📋 *Upcoming Tasks (Unassigned):* ${unassigned.length}\n`;
-    for (const t of unassigned) {
-      msg += `\n• ${t.name} — ${t.department} [${t.priority}]`;
+      msg += `\n---\n\n`;
+      msg += `${icon} *Owner:* ${ownerName}\n`;
+      msg += `*Task:* ${t.name}\n`;
+      msg += `*Department:* ${t.department}\n`;
+      msg += `*Priority:* ${t.priority}\n`;
+      msg += `*Status:* ${t.status}`;
     }
   }
 
@@ -252,13 +219,7 @@ async function scanTasksAndGenerateSummary() {
     summary: msg,
     stats: {
       total: allTasks.length,
-      assigned: tasks.length,
-      unassigned: unassigned.length,
-      pending: pending.length,
-      completed: completed.length,
-      highPriority: highPriority.length,
-      mediumPriority: mediumPriority.length,
-      lowPriority: lowPriority.length,
+      todayTasks: todayTasks.length,
     },
   };
 }
@@ -283,14 +244,7 @@ async function sendSummaryToGroup(groupName) {
       };
     }
 
-    try {
-      const logoBase64 = await fetchImageAsBase64(TIRTAM_LOGO_URL);
-      const media = new MessageMedia('image/png', logoBase64, 'tirtam-logo.png');
-      await group.sendMessage(media, { caption: summary });
-    } catch (logoErr) {
-      console.warn('Could not attach logo, sending text only:', logoErr.message);
-      await group.sendMessage(summary);
-    }
+    await group.sendMessage(summary);
 
     await supabase
       .from('whatsapp_config')

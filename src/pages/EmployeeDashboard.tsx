@@ -1,14 +1,35 @@
 import { useStore } from '../store/useStore';
 import { useAuth } from '../lib/auth';
 import { isOverdue, isDueToday, isDueThisWeek, formatDate, statusColors, priorityColors, getCompletionPercentage } from '../utils/helpers';
-import { Clock, AlertTriangle, CheckCircle2, Flame, CalendarDays, TrendingUp } from 'lucide-react';
+import type { Task, Priority } from '../types';
+import { Clock, AlertTriangle, CheckCircle2, Flame, CalendarDays, TrendingUp, ListTodo } from 'lucide-react';
+
+const priorityOrder: Record<Priority, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+
+function sortCurrentTasks(tasks: Task[]) {
+  return [...tasks].sort((a, b) => {
+    const aOverdue = isOverdue(a) ? 0 : 1;
+    const bOverdue = isOverdue(b) ? 0 : 1;
+    if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+
+    const aToday = isDueToday(a) ? 0 : 1;
+    const bToday = isDueToday(b) ? 0 : 1;
+    if (aToday !== bToday) return aToday - bToday;
+
+    const pri = priorityOrder[a.priority] - priorityOrder[b.priority];
+    if (pri !== 0) return pri;
+
+    return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+  });
+}
 
 export default function EmployeeDashboard() {
-  const { tasks, employees, activities } = useStore();
+  const { tasks, employees, activities, setEditingTask, setTaskModalOpen } = useStore();
   const { profile } = useAuth();
   const currentUser = profile ? { ...profile, department: profile.department as any } : employees[0];
   const myTasks = tasks.filter((t) => t.owner === currentUser.id);
   const myActive = myTasks.filter((t) => t.status !== 'Completed');
+  const myCurrentTasks = sortCurrentTasks(myActive);
   const myOverdue = myTasks.filter((t) => isOverdue(t));
   const myToday = myActive.filter((t) => isDueToday(t));
   const myThisWeek = myActive.filter((t) => isDueThisWeek(t));
@@ -17,6 +38,18 @@ export default function EmployeeDashboard() {
   const completionRate = getCompletionPercentage(myTasks);
 
   const myRecentActivity = activities.filter((a) => a.userId === currentUser.id).slice(0, 5);
+
+  const openTask = (task: Task) => {
+    setEditingTask(task);
+    setTaskModalOpen(true);
+  };
+
+  const taskHighlight = (task: Task) => {
+    if (isOverdue(task)) return 'border-l-red-500 bg-red-50/40 hover:bg-red-50/70';
+    if (isDueToday(task)) return 'border-l-amber-500 bg-amber-50/40 hover:bg-amber-50/70';
+    if (task.status === 'Pending') return 'border-l-indigo-500 bg-indigo-50/30 hover:bg-indigo-50/50';
+    return 'border-l-zinc-300 bg-white hover:bg-zinc-50/80';
+  };
 
   const stats = [
     { label: 'Active Tasks', value: myActive.length, icon: <TrendingUp size={16} />, color: 'text-zinc-600', bg: 'bg-zinc-50' },
@@ -32,10 +65,77 @@ export default function EmployeeDashboard() {
           {currentUser.avatar}
         </div>
         <div>
-          <h1 className="text-[20px] font-semibold text-zinc-900 tracking-tight">Welcome, {currentUser.name.split(' ')[0]}</h1>
-          <p className="text-[13px] text-zinc-400 mt-0.5">{currentUser.role} · {currentUser.department} · {completionRate}% completion</p>
+          <h1 className="text-[20px] font-semibold text-zinc-900 tracking-tight">My Dashboard</h1>
+          <p className="text-[13px] text-zinc-400 mt-0.5">
+            {currentUser.name.split(' ')[0]} · {currentUser.role} · {completionRate}% complete
+          </p>
         </div>
       </div>
+
+      {/* Your Current Tasks — primary focus */}
+      <section className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/90 via-white to-white shadow-[0_4px_24px_rgba(99,102,241,0.08)] overflow-hidden">
+        <div className="px-5 py-4 border-b border-indigo-100/80 bg-indigo-600/5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0">
+              <ListTodo size={18} className="text-white" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-[16px] font-semibold text-zinc-900">Your Current Tasks</h2>
+              <p className="text-[12px] text-indigo-600/80 mt-0.5">Pending & active work assigned to you</p>
+            </div>
+          </div>
+          <span className="flex-shrink-0 text-[12px] font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full">
+            {myCurrentTasks.length} open
+          </span>
+        </div>
+
+        <div className="p-4 space-y-2">
+          {myCurrentTasks.length === 0 ? (
+            <div className="flex flex-col items-center py-10 text-center">
+              <CheckCircle2 size={32} className="text-emerald-400 mb-2" />
+              <p className="text-[14px] font-medium text-zinc-600">You're all caught up!</p>
+              <p className="text-[12px] text-zinc-400 mt-1">No pending tasks right now</p>
+            </div>
+          ) : (
+            myCurrentTasks.map((task) => {
+              const overdue = isOverdue(task);
+              const dueToday = isDueToday(task);
+              return (
+                <button
+                  key={task.id}
+                  type="button"
+                  onClick={() => openTask(task)}
+                  className={`w-full text-left rounded-xl border border-zinc-100 border-l-4 px-4 py-3 transition-all ${taskHighlight(task)}`}
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-[14px] font-semibold leading-snug ${overdue ? 'text-red-700' : 'text-zinc-900'}`}>
+                        {task.name}
+                      </p>
+                      {task.description && (
+                        <p className="text-[12px] text-zinc-500 mt-1 line-clamp-2">{task.description}</p>
+                      )}
+                      <p className="text-[11px] text-zinc-400 mt-1.5">{task.department}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 sm:flex-col sm:items-end sm:flex-shrink-0">
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${priorityColors[task.priority].bg} ${priorityColors[task.priority].text}`}>
+                        {task.priority}
+                      </span>
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium ${statusColors[task.status].bg} ${statusColors[task.status].text}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${statusColors[task.status].dot}`} />
+                        {task.status}
+                      </span>
+                      <span className={`text-[11px] font-medium ${overdue ? 'text-red-600' : dueToday ? 'text-amber-600' : 'text-zinc-500'}`}>
+                        {overdue ? 'Overdue · ' : dueToday ? 'Due today · ' : ''}{formatDate(task.deadline)}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </section>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {stats.map((s) => (
@@ -54,14 +154,19 @@ export default function EmployeeDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl border border-zinc-100 p-6">
           <h2 className="text-[15px] font-semibold text-zinc-900 mb-4 flex items-center gap-2">
-            <CalendarDays size={16} className="text-amber-500" /> Today's Priorities
+            <CalendarDays size={16} className="text-amber-500" /> Due Today & High Priority
           </h2>
           {myToday.length === 0 && myHighPriority.length === 0 ? (
-            <p className="text-[13px] text-zinc-400 py-6 text-center">No urgent tasks for today</p>
+            <p className="text-[13px] text-zinc-400 py-6 text-center">Nothing urgent today</p>
           ) : (
             <div className="space-y-2">
               {[...myToday, ...myHighPriority.filter((t) => !myToday.includes(t))].slice(0, 6).map((task) => (
-                <div key={task.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-zinc-50 transition-colors">
+                <button
+                  key={task.id}
+                  type="button"
+                  onClick={() => openTask(task)}
+                  className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-zinc-50 transition-colors text-left"
+                >
                   <div className="flex items-center gap-2.5 flex-1 min-w-0">
                     <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${priorityColors[task.priority].bg} ${priorityColors[task.priority].text}`}>
                       {task.priority}
@@ -72,7 +177,7 @@ export default function EmployeeDashboard() {
                     <span className={`w-1 h-1 rounded-full ${statusColors[task.status].dot}`}></span>
                     {task.status}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -90,13 +195,18 @@ export default function EmployeeDashboard() {
           ) : (
             <div className="space-y-2">
               {myOverdue.map((task) => (
-                <div key={task.id} className="flex items-center justify-between p-2.5 rounded-lg bg-red-50/60 border border-red-100">
+                <button
+                  key={task.id}
+                  type="button"
+                  onClick={() => openTask(task)}
+                  className="w-full flex items-center justify-between p-2.5 rounded-lg bg-red-50/60 border border-red-100 text-left hover:bg-red-50 transition-colors"
+                >
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-medium text-red-700">{task.name}</p>
                     <p className="text-[11px] text-zinc-400 mt-0.5">{task.department}</p>
                   </div>
                   <span className="text-[11px] text-red-500 font-medium flex-shrink-0">Due {formatDate(task.deadline)}</span>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -110,13 +220,18 @@ export default function EmployeeDashboard() {
           </h2>
           <div className="space-y-2">
             {myThisWeek.slice(0, 6).map((task) => (
-              <div key={task.id} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-zinc-50 transition-colors">
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => openTask(task)}
+                className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-zinc-50 transition-colors text-left"
+              >
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-medium text-zinc-700 truncate">{task.name}</p>
                   <p className="text-[11px] text-zinc-400">{task.department}</p>
                 </div>
                 <span className="text-[11px] text-zinc-500 flex-shrink-0">{formatDate(task.deadline)}</span>
-              </div>
+              </button>
             ))}
             {myThisWeek.length === 0 && (
               <p className="text-[13px] text-zinc-400 py-6 text-center">No deadlines this week</p>
@@ -147,51 +262,26 @@ export default function EmployeeDashboard() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-zinc-100 p-6">
-        <h2 className="text-[15px] font-semibold text-zinc-900 mb-4">All My Tasks</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-zinc-100">
-                <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-400 px-3 py-2.5">Task</th>
-                <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-400 px-3 py-2.5">Department</th>
-                <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-400 px-3 py-2.5">Priority</th>
-                <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-400 px-3 py-2.5">Status</th>
-                <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-400 px-3 py-2.5">Deadline</th>
-              </tr>
-            </thead>
-            <tbody>
-              {myTasks.map((task) => {
-                const overdue = isOverdue(task);
-                return (
-                  <tr key={task.id} className="border-b border-zinc-50 hover:bg-zinc-50/50 transition-colors">
-                    <td className="px-3 py-2.5">
-                      <p className={`text-[13px] font-medium ${overdue ? 'text-red-600' : 'text-zinc-800'}`}>{task.name}</p>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className="text-[12px] text-zinc-400">{task.department}</span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${priorityColors[task.priority].bg} ${priorityColors[task.priority].text}`}>
-                        {task.priority}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium ${statusColors[task.status].bg} ${statusColors[task.status].text}`}>
-                        <span className={`w-1 h-1 rounded-full ${statusColors[task.status].dot}`}></span>
-                        {task.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={`text-[12px] ${overdue ? 'text-red-500 font-medium' : 'text-zinc-500'}`}>{formatDate(task.deadline)}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {myCompleted.length > 0 && (
+        <div className="bg-white rounded-xl border border-zinc-100 p-6">
+          <h2 className="text-[15px] font-semibold text-zinc-900 mb-4 flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-emerald-500" /> Recently Completed
+          </h2>
+          <div className="space-y-2">
+            {myCompleted.slice(0, 5).map((task) => (
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => openTask(task)}
+                className="w-full flex items-center justify-between p-2.5 rounded-lg hover:bg-zinc-50 transition-colors text-left opacity-70"
+              >
+                <span className="text-[13px] text-zinc-500 line-through truncate">{task.name}</span>
+                <span className="text-[11px] text-zinc-400 flex-shrink-0">{task.department}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

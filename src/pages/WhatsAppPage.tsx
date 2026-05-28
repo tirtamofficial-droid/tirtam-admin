@@ -100,7 +100,7 @@ export default function WhatsAppPage() {
       )}
 
       {/* Status Cards */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl border border-border p-4 flex items-center gap-3">
           <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${botOnline ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-500'}`}>
             {botOnline ? <Wifi size={20} /> : <WifiOff size={20} />}
@@ -290,11 +290,6 @@ export default function WhatsAppPage() {
             {showPreview && (
               <div className="bg-[#e5ddd5] rounded-xl p-4 max-h-[600px] overflow-y-auto">
                 <div className="bg-[#dcf8c6] rounded-xl p-3 shadow-sm max-w-[95%] ml-auto">
-                  <img
-                    src="https://www.tirtam.com/cdn/shop/files/Pi7-Image-Cropper.png?v=1779194222&width=360"
-                    alt="Tirtam"
-                    className="w-full rounded-lg mb-2"
-                  />
                   <pre className="text-[11px] text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">
                     {summary}
                   </pre>

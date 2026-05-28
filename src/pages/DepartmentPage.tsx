@@ -1,13 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useStore } from '../store/useStore';
-import { departmentIcons, departments, getCompletionPercentage, isOverdue, priorityColors } from '../utils/helpers';
+import { departmentIcons, departments, getCompletionPercentage, isOverdue, priorityColors, sortTasks, type TaskSortDir, type TaskSortKey } from '../utils/helpers';
 import TaskTable from '../components/TaskTable';
-import KanbanBoard from '../components/KanbanBoard';
 import FilterBar from '../components/FilterBar';
+import SortBar from '../components/SortBar';
 import type { Department, Task, TaskStatus, ViewMode } from '../types';
-import { Table, Columns3, Clock, AlertTriangle, CheckCircle2, Flame, Plus, ArrowLeft, ChevronDown, ChevronUp, Check } from 'lucide-react';
-
-const ALL_STATUSES: TaskStatus[] = ['Pending', 'In Progress', 'Blocked', 'Review', 'Completed'];
+import { Table, Clock, CheckCircle2, Flame, Plus, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 
 const statusColors: Record<TaskStatus, string> = {
   'Pending': 'bg-zinc-100 text-zinc-600',
@@ -19,10 +17,8 @@ const statusColors: Record<TaskStatus, string> = {
 
 const views: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
   { id: 'table', label: 'Table', icon: <Table size={14} /> },
-  { id: 'kanban', label: 'Kanban', icon: <Columns3 size={14} /> },
   { id: 'pending', label: 'Pending', icon: <Clock size={14} /> },
   { id: 'high-priority', label: 'High Priority', icon: <Flame size={14} /> },
-  { id: 'overdue', label: 'Overdue', icon: <AlertTriangle size={14} /> },
   { id: 'completed', label: 'Completed', icon: <CheckCircle2 size={14} /> },
 ];
 
@@ -84,12 +80,49 @@ function DepartmentGrid({ onSelect }: { onSelect: (dept: Department) => void }) 
   );
 }
 
+// ── Confirm complete dialog ───────────────────────────────────────────────────
+function ConfirmCompleteDialog({
+  task,
+  onConfirm,
+  onCancel,
+}: {
+  task: Task;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-end sm:items-center sm:p-4 animate-fade-in" onClick={onCancel}>
+      <div
+        className="bg-white rounded-t-2xl sm:rounded-2xl shadow-float w-full sm:max-w-sm border border-zinc-100 p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-[16px] font-semibold text-zinc-900">Mark as completed?</h3>
+        <p className="text-[13px] text-zinc-500 mt-2 leading-relaxed">
+          Are you sure you want to mark <span className="font-medium text-zinc-700">"{task.name}"</span> as completed?
+        </p>
+        <div className="flex items-center gap-3 mt-6">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2.5 text-[13px] font-medium border border-zinc-200 rounded-xl hover:bg-zinc-50 transition-colors text-zinc-600"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 px-4 py-2.5 text-[13px] font-medium bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors"
+          >
+            Mark completed
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Column header row ─────────────────────────────────────────────────────────
 function TableHeader() {
   return (
-    <div className="flex items-center w-full px-4 py-2 border-b border-zinc-100 bg-zinc-50/60 gap-2">
-      {/* Quick-complete spacer */}
-      <span className="w-6 flex-shrink-0" />
+    <div className="hidden lg:flex items-center w-full px-4 py-2 border-b border-zinc-100 bg-zinc-50/60 gap-2">
       <span className="flex-1 min-w-0 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
         Task
       </span>
@@ -108,6 +141,9 @@ function TableHeader() {
       <span className="w-16 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 text-right">
         Priority
       </span>
+      <span className="w-28 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 text-right">
+        Actions
+      </span>
     </div>
   );
 }
@@ -118,16 +154,15 @@ type TaskRowVariant = 'in-progress' | 'upcoming' | 'completed';
 function TaskRow({
   task,
   variant = 'upcoming',
-  openDropdownId,
-  setOpenDropdownId,
+  onRequestComplete,
 }: {
   task: Task;
   variant?: TaskRowVariant;
-  openDropdownId: string | null;
-  setOpenDropdownId: (id: string | null) => void;
+  onRequestComplete: () => void;
 }) {
-  const { setEditingTask, setTaskModalOpen, employees, updateTask } = useStore();
+  const { setEditingTask, setTaskModalOpen, employees } = useStore();
   const isCompleted = task.status === 'Completed';
+  const isUpcoming = variant === 'upcoming';
   const isInProgress = variant === 'in-progress';
   const overdue = isOverdue(task);
   const pc = priorityColors[task.priority];
@@ -139,19 +174,10 @@ function TaskRow({
     ? new Date(task.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     : '—';
 
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const isDropdownOpen = openDropdownId === task.id;
-
-  useEffect(() => {
-    if (!isDropdownOpen) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpenDropdownId(null);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isDropdownOpen, setOpenDropdownId]);
+  const openTask = () => {
+    setEditingTask(task);
+    setTaskModalOpen(true);
+  };
 
   const rowCls = isInProgress
     ? 'bg-green-50/30 hover:bg-green-50/60 border-l-4 border-l-green-400'
@@ -159,91 +185,105 @@ function TaskRow({
     ? 'bg-zinc-50/50 hover:bg-zinc-50 border-l-4 border-l-zinc-100'
     : 'hover:bg-zinc-50 border-l-4 border-l-zinc-200';
 
+  const statusBadge = (
+    <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium ${statusColors[task.status]}`}>
+      {task.status}
+    </span>
+  );
+
+  const markCompleteButton = !isCompleted ? (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onRequestComplete();
+      }}
+      className="text-[11px] font-medium text-green-700 bg-green-50 hover:bg-green-100 px-2.5 py-1 rounded-md transition-colors whitespace-nowrap"
+    >
+      Mark complete
+    </button>
+  ) : null;
+
   return (
-    <div className={`flex items-center w-full px-4 py-2.5 border-b border-zinc-50 last:border-0 transition-colors ${rowCls} gap-2`}>
-      {/* Quick-complete circle */}
-      <button
-        onClick={() => updateTask(task.id, { status: isCompleted ? 'Pending' : 'Completed' })}
-        className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors
-          ${isCompleted
-            ? 'bg-green-500 border-green-500'
-            : 'border-zinc-300 hover:border-green-500 bg-transparent'
-          }`}
-        title={isCompleted ? 'Mark as pending' : 'Mark as complete'}
-      >
-        {isCompleted && <Check size={10} strokeWidth={3} className="text-white" />}
-      </button>
-
-      {/* Task name — opens modal on click */}
-      <button
-        onClick={() => { setEditingTask(task); setTaskModalOpen(true); }}
-        className={`flex-1 min-w-0 font-medium text-[13px] truncate text-left ${isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-800'}`}
-      >
-        {task.name}
-      </button>
-
-      {/* Description */}
-      <span className="w-36 text-zinc-400 text-[12px] truncate hidden lg:block pr-2">
-        {task.description || '—'}
-      </span>
-
-      {/* Owner */}
-      <span className="w-24 text-[12px] truncate">
-        {hasOwner ? (
-          <span className="text-zinc-500">{ownerFirstName}</span>
-        ) : (
-          <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
-            Unassigned
-          </span>
-        )}
-      </span>
-
-      {/* Status badge + dropdown */}
-      <div className="w-28 relative" ref={dropdownRef}>
+    <div className={`w-full px-4 py-2.5 border-b border-zinc-50 last:border-0 transition-colors ${rowCls}`}>
+      {/* Mobile: stacked layout */}
+      <div className="lg:hidden space-y-1.5">
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpenDropdownId(isDropdownOpen ? null : task.id);
-          }}
-          className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium w-full justify-center truncate transition-opacity hover:opacity-80 ${statusColors[task.status]}`}
+          onClick={openTask}
+          className="w-full text-left"
         >
-          {task.status}
+          <p className={`font-medium text-[13px] leading-snug ${isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-800'}`}>
+            {task.name}
+          </p>
+          {task.description ? (
+            <p className="text-[12px] text-zinc-400 mt-1 leading-snug line-clamp-2">
+              {task.description}
+            </p>
+          ) : isUpcoming ? (
+            <p className="text-[12px] text-purple-500 mt-1">Tap to assign owner and fill details</p>
+          ) : null}
         </button>
 
-        {isDropdownOpen && (
-          <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-zinc-100 rounded-lg shadow-lg py-1 min-w-[130px]">
-            {ALL_STATUSES.map((s) => (
-              <button
-                key={s}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  updateTask(task.id, { status: s });
-                  setOpenDropdownId(null);
-                }}
-                className={`w-full text-left px-3 py-1.5 text-[12px] font-medium hover:bg-zinc-50 transition-colors flex items-center gap-2
-                  ${task.status === s ? 'opacity-100' : 'opacity-70 hover:opacity-100'}`}
-              >
-                <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusColors[s]}`}>
-                  {s}
-                </span>
-                {task.status === s && <Check size={10} strokeWidth={3} className="text-zinc-400 ml-auto" />}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          {hasOwner ? (
+            <span className="text-[12px] text-zinc-500">{ownerFirstName}</span>
+          ) : (
+            <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+              Unassigned
+            </span>
+          )}
+          {statusBadge}
+          <span className={`text-[12px] ${overdue && !isCompleted ? 'text-red-500 font-medium' : 'text-zinc-400'}`}>
+            {dueDateStr}
+          </span>
+          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${pc.bg} ${pc.text}`}>
+            {task.priority}
+          </span>
+          {markCompleteButton}
+        </div>
       </div>
 
-      {/* Due date */}
-      <span className={`w-20 text-[12px] text-right ${overdue && !isCompleted ? 'text-red-500 font-medium' : 'text-zinc-400'}`}>
-        {dueDateStr}
-      </span>
+      {/* Desktop: table row layout */}
+      <div className="hidden lg:flex items-center w-full gap-2">
+        <button
+          onClick={openTask}
+          className={`flex-1 min-w-0 text-left ${isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-800'}`}
+        >
+          <p className="font-medium text-[13px] truncate">{task.name}</p>
+          {isUpcoming && !task.description && (
+            <p className="text-[11px] text-purple-500 truncate mt-0.5">Click to assign owner and fill details</p>
+          )}
+        </button>
 
-      {/* Priority badge */}
-      <span className="w-16 flex justify-end">
-        <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${pc.bg} ${pc.text}`}>
-          {task.priority}
+        <span className="w-36 text-zinc-400 text-[12px] truncate pr-2">
+          {task.description || (isUpcoming ? '—' : '—')}
         </span>
-      </span>
+
+        <span className="w-24 text-[12px] truncate">
+          {hasOwner ? (
+            <span className="text-zinc-500">{ownerFirstName}</span>
+          ) : (
+            <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+              Unassigned
+            </span>
+          )}
+        </span>
+
+        <span className="w-28">{statusBadge}</span>
+
+        <span className={`w-20 text-[12px] text-right ${overdue && !isCompleted ? 'text-red-500 font-medium' : 'text-zinc-400'}`}>
+          {dueDateStr}
+        </span>
+
+        <span className="w-16 flex justify-end">
+          <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold ${pc.bg} ${pc.text}`}>
+            {task.priority}
+          </span>
+        </span>
+
+        <span className="w-28 flex justify-end">
+          {markCompleteButton}
+        </span>
+      </div>
     </div>
   );
 }
@@ -251,7 +291,8 @@ function TaskRow({
 // ── Main sectioned view ───────────────────────────────────────────────────────
 function SectionedView({ tasks }: { tasks: Task[] }) {
   const [showAllCompleted, setShowAllCompleted] = useState(false);
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [confirmCompleteTask, setConfirmCompleteTask] = useState<Task | null>(null);
+  const { updateTask } = useStore();
 
   // Owner-based sectioning
   const inProgress = tasks.filter(
@@ -268,6 +309,16 @@ function SectionedView({ tasks }: { tasks: Task[] }) {
 
   return (
     <div className="space-y-6">
+      {confirmCompleteTask && (
+        <ConfirmCompleteDialog
+          task={confirmCompleteTask}
+          onConfirm={() => {
+            updateTask(confirmCompleteTask.id, { status: 'Completed' });
+            setConfirmCompleteTask(null);
+          }}
+          onCancel={() => setConfirmCompleteTask(null)}
+        />
+      )}
       {/* ── In Progress ─────────────────────────────────────────────────── */}
       <div>
         <div className="flex items-center gap-2 mb-3">
@@ -286,7 +337,7 @@ function SectionedView({ tasks }: { tasks: Task[] }) {
           <div className="bg-white rounded-xl border border-zinc-100 overflow-hidden w-full">
             <TableHeader />
             {inProgress.map((task) => (
-              <TaskRow key={task.id} task={task} variant="in-progress" openDropdownId={openDropdownId} setOpenDropdownId={setOpenDropdownId} />
+              <TaskRow key={task.id} task={task} variant="in-progress" onRequestComplete={() => setConfirmCompleteTask(task)} />
             ))}
           </div>
         )}
@@ -310,7 +361,7 @@ function SectionedView({ tasks }: { tasks: Task[] }) {
           <div className="bg-white rounded-xl border border-zinc-100 overflow-hidden w-full">
             <TableHeader />
             {upcoming.map((task) => (
-              <TaskRow key={task.id} task={task} variant="upcoming" openDropdownId={openDropdownId} setOpenDropdownId={setOpenDropdownId} />
+              <TaskRow key={task.id} task={task} variant="upcoming" onRequestComplete={() => setConfirmCompleteTask(task)} />
             ))}
           </div>
         )}
@@ -336,7 +387,7 @@ function SectionedView({ tasks }: { tasks: Task[] }) {
           <div className="bg-white rounded-xl border border-zinc-100 overflow-hidden w-full">
             <TableHeader />
             {visibleCompleted.map((task) => (
-              <TaskRow key={task.id} task={task} variant="completed" openDropdownId={openDropdownId} setOpenDropdownId={setOpenDropdownId} />
+              <TaskRow key={task.id} task={task} variant="completed" onRequestComplete={() => setConfirmCompleteTask(task)} />
             ))}
 
             {completed.length > 3 && (
@@ -361,7 +412,9 @@ function SectionedView({ tasks }: { tasks: Task[] }) {
 }
 
 export default function DepartmentPage() {
-  const { activeDepartment, setActiveDepartment, activeView, setActiveView, getFilteredTasks, setTaskModalOpen, tasks } = useStore();
+  const { activeDepartment, setActiveDepartment, activeView, setActiveView, getFilteredTasks, setTaskModalOpen, tasks, employees } = useStore();
+  const [sortKey, setSortKey] = useState<TaskSortKey>('updatedAt');
+  const [sortDir, setSortDir] = useState<TaskSortDir>('desc');
 
   if (!activeDepartment) {
     return <DepartmentGrid onSelect={(dept) => setActiveDepartment(dept)} />;
@@ -373,16 +426,18 @@ export default function DepartmentPage() {
   switch (activeView) {
     case 'pending': filtered = filtered.filter((t) => t.status === 'Pending'); break;
     case 'high-priority': filtered = filtered.filter((t) => t.priority === 'Critical' || t.priority === 'High'); break;
-    case 'overdue': filtered = filtered.filter((t) => isOverdue(t)); break;
     case 'completed': filtered = filtered.filter((t) => t.status === 'Completed'); break;
   }
+
+  const getOwnerName = (id: string) => employees.find((e) => e.id === id)?.name || '';
+  const displayTasks = sortTasks(filtered, sortKey, sortDir, getOwnerName);
 
   const completion = getCompletionPercentage(allDeptTasks);
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => setActiveDepartment(null)}
             className="p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition-colors"
@@ -398,36 +453,45 @@ export default function DepartmentPage() {
         </div>
         <button
           onClick={() => setTaskModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-[13px] font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-[13px] font-medium rounded-lg hover:bg-indigo-700 transition-colors flex-shrink-0 self-start sm:self-auto"
         >
           <Plus size={16} /> Add Task
         </button>
       </div>
 
-      <div className="flex items-center gap-1 p-1 bg-zinc-50 rounded-lg w-fit border border-zinc-100">
+      <div className="grid grid-cols-2 gap-1 p-1 bg-zinc-50 rounded-lg border border-zinc-100 w-full sm:flex sm:flex-nowrap sm:w-auto sm:max-w-none">
         {views.map((v) => (
           <button
             key={v.id}
             onClick={() => setActiveView(v.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all
+            className={`flex items-center justify-center gap-1.5 px-2 py-2 sm:px-3 sm:py-1.5 rounded-md text-[11px] sm:text-[12px] font-medium transition-all
               ${activeView === v.id ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-400 hover:text-zinc-600'}`}
           >
-            {v.icon} {v.label}
+            {v.icon}
+            <span className="truncate">{v.id === 'high-priority' ? 'High Pri.' : v.label}</span>
           </button>
         ))}
       </div>
 
-      <FilterBar />
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-start gap-2">
+          <FilterBar />
+          <SortBar
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onChange={(key, dir) => {
+              setSortKey(key);
+              setSortDir(dir);
+            }}
+          />
+        </div>
+      </div>
 
       {activeView === 'table' ? (
-        <SectionedView tasks={filtered} />
-      ) : activeView === 'kanban' ? (
-        <div className="bg-white rounded-xl border border-zinc-100 overflow-hidden p-4">
-          <KanbanBoard tasks={filtered} />
-        </div>
+        <SectionedView tasks={displayTasks} />
       ) : (
         <div className="bg-white rounded-xl border border-zinc-100 overflow-hidden">
-          <TaskTable tasks={filtered} />
+          <TaskTable tasks={displayTasks} enableHeaderSort={false} />
         </div>
       )}
     </div>

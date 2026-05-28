@@ -1,11 +1,21 @@
+import { useState, useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import TaskTable from '../components/TaskTable';
 import FilterBar from '../components/FilterBar';
+import SortBar from '../components/SortBar';
+import { sortTasks, type TaskSortDir, type TaskSortKey } from '../utils/helpers';
 import { Search } from 'lucide-react';
 
 export default function SearchPage() {
-  const { filters, setFilters, getFilteredTasks } = useStore();
+  const { filters, setFilters, getFilteredTasks, employees } = useStore();
+  const [sortKey, setSortKey] = useState<TaskSortKey>('updatedAt');
+  const [sortDir, setSortDir] = useState<TaskSortDir>('desc');
   const filtered = getFilteredTasks();
+  const getOwnerName = (id: string) => employees.find((e) => e.id === id)?.name || '';
+  const displayTasks = useMemo(
+    () => sortTasks(filtered, sortKey, sortDir, getOwnerName),
+    [filtered, sortKey, sortDir, employees]
+  );
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -29,13 +39,25 @@ export default function SearchPage() {
         />
       </div>
 
-      <FilterBar />
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-start gap-2">
+          <FilterBar />
+          <SortBar
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onChange={(key, dir) => {
+              setSortKey(key);
+              setSortDir(dir);
+            }}
+          />
+        </div>
+      </div>
 
       <div className="bg-white rounded-xl border border-zinc-100 overflow-hidden">
         <div className="px-5 py-2.5 border-b border-zinc-50 bg-zinc-50/50">
-          <p className="text-[12px] text-zinc-400 font-medium">{filtered.length} tasks found</p>
+          <p className="text-[12px] text-zinc-400 font-medium">{displayTasks.length} tasks found</p>
         </div>
-        <TaskTable tasks={filtered} />
+        <TaskTable tasks={displayTasks} enableHeaderSort={false} />
       </div>
     </div>
   );

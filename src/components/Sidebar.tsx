@@ -39,12 +39,12 @@ export default function Sidebar() {
   const isActive = (path: string) => location.pathname === path;
   const isDeptActive = (dept: Department) => location.pathname === '/tasks' && activeDepartment === dept;
 
-  const businessModules = [
-    { path: '/finance', label: 'Finance', icon: '💰' },
+  const businessModules: { path: string; label: string; icon: string; ready?: boolean }[] = [
+    { path: '/finance', label: 'Expense', icon: '💰', ready: true },
+    { path: '/vendors', label: 'Vendors', icon: '🤝', ready: true },
     { path: '/product-kits', label: 'Product Kits', icon: '🎁' },
     { path: '/crystals', label: 'Crystals & Products', icon: '💎' },
     { path: '/products', label: 'Products', icon: '🛍️' },
-    { path: '/vendors', label: 'Vendors', icon: '🤝' },
     { path: '/weekly-focus', label: 'Weekly Focus', icon: '📅' },
     { path: '/decisions', label: 'Decision Log', icon: '📝' },
     { path: '/goals', label: 'Goals & OKRs', icon: '🎯' },
@@ -101,8 +101,8 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         <p className={`text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400 px-3 mb-2 ${sidebarCollapsed ? 'md:hidden' : ''}`}>Overview</p>
 
-        {isAdmin && navItem('/', 'Founder Dashboard', <LayoutDashboard size={18} />, () => setActiveDepartment(null))}
         {navItem('/employee', 'My Dashboard', <Users size={18} />, () => setActiveDepartment(null))}
+        {isAdmin && navItem('/founder', 'Founder Dashboard', <LayoutDashboard size={18} />, () => setActiveDepartment(null))}
         {navItem('/activity', 'Activity Feed', <Activity size={18} />, () => setActiveDepartment(null))}
         {navItem('/search', 'Search Tasks', <Search size={18} />, () => setActiveDepartment(null))}
         {isAdmin && navItem('/whatsapp', 'WhatsApp Bot', <MessageSquare size={18} />, () => setActiveDepartment(null))}
@@ -146,27 +146,36 @@ export default function Sidebar() {
         <p className={`text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400 px-3 mt-5 mb-2 ${sidebarCollapsed ? 'md:hidden' : ''}`}>Departments</p>
         {sidebarCollapsed && <div className="hidden md:block border-t border-zinc-100 my-3" />}
 
-        {businessModules.map((mod) => (
-          <button
-            key={mod.path}
-            onClick={() => { setActiveDepartment(null); navigate(mod.path); closeMobile(); }}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150
-              ${isActive(mod.path)
-                ? 'bg-indigo-600 text-white'
-                : 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900'
-              }
-              ${sidebarCollapsed ? 'md:justify-center' : ''}`}
-            title={sidebarCollapsed ? mod.label : undefined}
-          >
-            <span className="text-base flex-shrink-0">{mod.icon}</span>
-            <span className={`flex-1 flex items-center justify-between ${sidebarCollapsed ? 'md:hidden' : ''}`}>
-              <span className="truncate">{mod.label}</span>
-              <span className="flex items-center gap-0.5 text-[9px] text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded font-semibold flex-shrink-0">
-                <Clock size={8} /> Soon
+        {businessModules.map((mod) => {
+          const isReady = mod.ready === true;
+          return (
+            <button
+              key={mod.path}
+              onClick={() => { setActiveDepartment(null); navigate(mod.path); closeMobile(); }}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150
+                ${isActive(mod.path)
+                  ? isReady
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-zinc-200 text-zinc-500'
+                  : isReady
+                    ? 'text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900'
+                    : 'text-zinc-300 hover:bg-zinc-50/50 cursor-default'
+                }
+                ${sidebarCollapsed ? 'md:justify-center' : ''}`}
+              title={sidebarCollapsed ? mod.label : undefined}
+            >
+              <span className={`text-base flex-shrink-0 ${!isReady && !isActive(mod.path) ? 'opacity-50' : ''}`}>{mod.icon}</span>
+              <span className={`flex-1 flex items-center justify-between ${sidebarCollapsed ? 'md:hidden' : ''}`}>
+                <span className="truncate">{mod.label}</span>
+                {!isReady && (
+                  <span className="flex items-center gap-0.5 text-[9px] text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded font-semibold flex-shrink-0">
+                    <Clock size={8} /> Soon
+                  </span>
+                )}
               </span>
-            </span>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       <div className="p-3 border-t border-zinc-100">
@@ -191,9 +200,9 @@ export default function Sidebar() {
   );
 
   const bottomNavItems = [
-    { label: 'Home', icon: Home, path: isAdmin ? '/' : '/employee', exact: true },
+    { label: 'Home', icon: Home, path: '/employee', exact: true },
     { label: 'Tasks', icon: ClipboardList, path: '/tasks', exact: false },
-    { label: 'Finance', icon: Wallet, path: '/finance', exact: false },
+    { label: 'Expense', icon: Wallet, path: '/finance', exact: false },
     { label: 'Me', icon: User, path: '/employee', exact: true },
   ];
 

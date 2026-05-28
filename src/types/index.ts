@@ -11,7 +11,7 @@ export type TaskStatus = 'Pending' | 'In Progress' | 'Blocked' | 'Review' | 'Com
 
 export type Priority = 'Critical' | 'High' | 'Medium' | 'Low';
 
-export type ViewMode = 'table' | 'kanban' | 'pending' | 'high-priority' | 'overdue' | 'completed';
+export type ViewMode = 'table' | 'pending' | 'high-priority' | 'completed';
 
 export interface Employee {
   id: string;

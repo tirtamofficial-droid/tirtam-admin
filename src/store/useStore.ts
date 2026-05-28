@@ -6,11 +6,9 @@ import { dbAddTask, dbUpdateTask, dbDeleteTask } from '../hooks/useSupabaseData'
 
 interface Filters {
   owner: string;
-  department: Department | '';
   status: TaskStatus | '';
   priority: Priority | '';
   search: string;
-  deadlineBefore: string;
 }
 
 interface AppState {
@@ -58,11 +56,9 @@ interface AppState {
 
 const defaultFilters: Filters = {
   owner: '',
-  department: '',
   status: '',
   priority: '',
   search: '',
-  deadlineBefore: '',
 };
 
 export const useStore = create<AppState>()((set, get) => ({
@@ -223,12 +219,8 @@ export const useStore = create<AppState>()((set, get) => ({
       );
     }
     if (filters.owner) filtered = filtered.filter((t) => t.owner === filters.owner);
-    if (filters.department) filtered = filtered.filter((t) => t.department === filters.department);
     if (filters.status) filtered = filtered.filter((t) => t.status === filters.status);
     if (filters.priority) filtered = filtered.filter((t) => t.priority === filters.priority);
-    if (filters.deadlineBefore) {
-      filtered = filtered.filter((t) => new Date(t.deadline) <= new Date(filters.deadlineBefore));
-    }
     return filtered;
   },
 

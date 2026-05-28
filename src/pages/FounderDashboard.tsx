@@ -45,15 +45,17 @@ export default function FounderDashboard() {
         <p className="text-[13px] text-zinc-400 mt-1">Operational command center</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 w-full max-w-full">
         {stats.map((s) => (
-          <div key={s.label} className="bg-white rounded-xl border border-zinc-100 p-4 hover:shadow-card transition-all">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-medium text-zinc-400 uppercase tracking-wide">{s.label}</p>
-                <p className="text-[26px] font-bold text-zinc-900 mt-1 tracking-tight">{s.value}</p>
+          <div key={s.label} className="bg-white rounded-xl border border-zinc-100 p-3 sm:p-4 hover:shadow-card transition-all min-w-0">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[9px] sm:text-[11px] font-medium text-zinc-400 uppercase tracking-wide leading-tight truncate">
+                  {s.label}
+                </p>
+                <p className="text-[18px] sm:text-[26px] font-bold text-zinc-900 mt-0.5 sm:mt-1 tracking-tight">{s.value}</p>
               </div>
-              <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center ${s.color}`}>
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl ${s.bg} flex items-center justify-center ${s.color} flex-shrink-0 self-end sm:self-auto`}>
                 {s.icon}
               </div>
             </div>

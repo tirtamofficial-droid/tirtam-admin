@@ -1,7 +1,6 @@
 import { useStore } from '../store/useStore';
 import { Search, Plus, Bell, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../lib/auth';
 
 export default function TopBar() {
   const {
@@ -14,7 +13,6 @@ export default function TopBar() {
     setMobileSidebarOpen,
   } = useStore();
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
   const recentCount = activities.filter(
     (a) => Date.now() - new Date(a.timestamp).getTime() < 3600000
   ).length;
@@ -35,7 +33,7 @@ export default function TopBar() {
         </button>
 
         <button
-          onClick={() => navigate(isAdmin ? '/' : '/employee')}
+          onClick={() => navigate('/employee')}
           className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-zinc-50 transition-colors group"
           aria-label="Go home"
         >

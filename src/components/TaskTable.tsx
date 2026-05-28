@@ -6,6 +6,7 @@ import { MoreHorizontal, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-r
 
 interface Props {
   tasks: Task[];
+  enableHeaderSort?: boolean;
 }
 
 type SortKey = 'name' | 'priority' | 'status' | 'deadline' | 'owner' | 'updatedAt';
@@ -14,7 +15,7 @@ type SortDir = 'asc' | 'desc';
 const priorityOrder: Record<Priority, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 const statusOrder: Record<TaskStatus, number> = { Pending: 0, 'In Progress': 1, Blocked: 2, Review: 3, Completed: 4 };
 
-export default function TaskTable({ tasks }: Props) {
+export default function TaskTable({ tasks, enableHeaderSort = true }: Props) {
   const { employees, updateTask, deleteTask, setEditingTask, setTaskModalOpen } = useStore();
   const [sortKey, setSortKey] = useState<SortKey>('updatedAt');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -24,18 +25,20 @@ export default function TaskTable({ tasks }: Props) {
   const getOwnerName = (id: string) => employees.find((e) => e.id === id)?.name || 'Unassigned';
   const getOwnerAvatar = (id: string) => employees.find((e) => e.id === id)?.avatar || '??';
 
-  const sorted = [...tasks].sort((a, b) => {
-    let cmp = 0;
-    switch (sortKey) {
-      case 'name': cmp = a.name.localeCompare(b.name); break;
-      case 'priority': cmp = priorityOrder[a.priority] - priorityOrder[b.priority]; break;
-      case 'status': cmp = statusOrder[a.status] - statusOrder[b.status]; break;
-      case 'deadline': cmp = new Date(a.deadline).getTime() - new Date(b.deadline).getTime(); break;
-      case 'owner': cmp = getOwnerName(a.owner).localeCompare(getOwnerName(b.owner)); break;
-      case 'updatedAt': cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime(); break;
-    }
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
+  const sorted = enableHeaderSort
+    ? [...tasks].sort((a, b) => {
+        let cmp = 0;
+        switch (sortKey) {
+          case 'name': cmp = a.name.localeCompare(b.name); break;
+          case 'priority': cmp = priorityOrder[a.priority] - priorityOrder[b.priority]; break;
+          case 'status': cmp = statusOrder[a.status] - statusOrder[b.status]; break;
+          case 'deadline': cmp = new Date(a.deadline).getTime() - new Date(b.deadline).getTime(); break;
+          case 'owner': cmp = getOwnerName(a.owner).localeCompare(getOwnerName(b.owner)); break;
+          case 'updatedAt': cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime(); break;
+        }
+        return sortDir === 'asc' ? cmp : -cmp;
+      })
+    : tasks;
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
@@ -49,12 +52,13 @@ export default function TaskTable({ tasks }: Props) {
 
   const ColHeader = ({ col, label, className }: { col: SortKey; label: string; className?: string }) => (
     <th
-      className={`text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-400 px-3 py-3 cursor-pointer group select-none whitespace-nowrap ${className || ''}`}
-      onClick={() => toggleSort(col)}
+      className={`text-left text-[11px] font-semibold uppercase tracking-wider text-zinc-400 px-3 py-3 select-none whitespace-nowrap ${className || ''}
+        ${enableHeaderSort ? 'cursor-pointer group' : ''}`}
+      onClick={enableHeaderSort ? () => toggleSort(col) : undefined}
     >
       <div className="flex items-center gap-1">
         {label}
-        <SortIcon col={col} />
+        {enableHeaderSort && <SortIcon col={col} />}
       </div>
     </th>
   );
@@ -75,7 +79,54 @@ export default function TaskTable({ tasks }: Props) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <>
+      {/* Mobile: stacked card list */}
+      <div className="md:hidden divide-y divide-zinc-50">
+        {sorted.map((task) => {
+          const overdue = isOverdue(task);
+          return (
+            <div
+              key={task.id}
+              className="px-4 py-3 hover:bg-zinc-50/60 transition-colors"
+              onClick={() => { setEditingTask(task); setTaskModalOpen(true); }}
+            >
+              <p className={`text-[13px] font-medium leading-snug ${overdue ? 'text-red-600' : 'text-zinc-800'}`}>
+                {task.name}
+              </p>
+              {task.description && (
+                <p className="text-[12px] text-zinc-400 mt-1 leading-snug line-clamp-2">
+                  {task.description}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-2">
+                {task.owner && task.owner.trim() !== '' ? (
+                  <span className="text-[12px] text-zinc-500">{getOwnerName(task.owner)}</span>
+                ) : (
+                  <span className="text-[11px] text-indigo-500 font-medium bg-indigo-50 px-2 py-0.5 rounded">Upcoming</span>
+                )}
+                <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold ${priorityColors[task.priority].bg} ${priorityColors[task.priority].text}`}>
+                  {task.priority}
+                </span>
+                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-medium ${statusColors[task.status].bg} ${statusColors[task.status].text}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${statusColors[task.status].dot}`}></span>
+                  {task.status}
+                </span>
+                <span className={`text-[12px] ${overdue ? 'text-red-500 font-medium' : 'text-zinc-400'}`}>
+                  {formatDate(task.deadline)}
+                </span>
+                {task.tags.slice(0, 2).map((tag) => (
+                  <span key={tag} className="px-1.5 py-0.5 bg-zinc-50 border border-zinc-100 rounded text-[10px] text-zinc-400">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="hidden md:block overflow-x-auto">
       <table className="w-full min-w-[900px]">
         <thead>
           <tr className="border-b border-zinc-100 bg-zinc-50/50">
@@ -239,6 +290,7 @@ export default function TaskTable({ tasks }: Props) {
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }

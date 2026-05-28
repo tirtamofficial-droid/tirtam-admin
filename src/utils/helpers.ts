@@ -73,6 +73,41 @@ export const departments: Department[] = [
 export const statuses: TaskStatus[] = ['Pending', 'In Progress', 'Blocked', 'Review', 'Completed'];
 export const priorities: Priority[] = ['Critical', 'High', 'Medium', 'Low'];
 
+export type TaskSortKey = 'name' | 'priority' | 'status' | 'deadline' | 'owner' | 'updatedAt';
+export type TaskSortDir = 'asc' | 'desc';
+
+const priorityOrder: Record<Priority, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+const statusOrder: Record<TaskStatus, number> = { Pending: 0, 'In Progress': 1, Blocked: 2, Review: 3, Completed: 4 };
+
+export function sortTasks(
+  tasks: Task[],
+  sortKey: TaskSortKey,
+  sortDir: TaskSortDir,
+  getOwnerName: (id: string) => string = () => ''
+): Task[] {
+  return [...tasks].sort((a, b) => {
+    let cmp = 0;
+    switch (sortKey) {
+      case 'name': cmp = a.name.localeCompare(b.name); break;
+      case 'priority': cmp = priorityOrder[a.priority] - priorityOrder[b.priority]; break;
+      case 'status': cmp = statusOrder[a.status] - statusOrder[b.status]; break;
+      case 'deadline': cmp = new Date(a.deadline).getTime() - new Date(b.deadline).getTime(); break;
+      case 'owner': cmp = getOwnerName(a.owner).localeCompare(getOwnerName(b.owner)); break;
+      case 'updatedAt': cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime(); break;
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+}
+
+export const taskSortOptions: { key: TaskSortKey; label: string }[] = [
+  { key: 'updatedAt', label: 'Updated' },
+  { key: 'name', label: 'Name' },
+  { key: 'priority', label: 'Priority' },
+  { key: 'status', label: 'Status' },
+  { key: 'deadline', label: 'Deadline' },
+  { key: 'owner', label: 'Owner' },
+];
+
 export function getCompletionPercentage(tasks: Task[]): number {
   if (tasks.length === 0) return 0;
   const completed = tasks.filter((t) => t.status === 'Completed').length;
@@ -86,23 +121,9 @@ export function generateWhatsAppSummary(tasks: Task[], employees: { id: string; 
   };
 
   const hasOwner = (t: Task) => t.owner && t.owner.trim() !== '';
-  const assignedTasks = tasks.filter(hasOwner);
-  const unassigned = tasks.filter((t) => !hasOwner(t));
-
-  const pending = assignedTasks.filter((t) => t.status === 'Pending');
-  const completed = assignedTasks.filter((t) => t.status === 'Completed');
-  const active = assignedTasks.filter((t) => t.status !== 'Completed');
-
-  const highPriority = active.filter((t) => t.priority === 'Critical' || t.priority === 'High');
-  const mediumPriority = active.filter((t) => t.priority === 'Medium');
-  const lowPriority = active.filter((t) => t.priority === 'Low');
-
-  const formatDueDate = (deadline: string) => {
-    if (!deadline) return 'No date';
-    const dl = new Date(deadline);
-    if (isPast(dl)) return 'Overdue';
-    return format(dl, 'MMMM d');
-  };
+  const todayTasks = tasks.filter(
+    (t) => t.status !== 'Completed' && hasOwner(t) && isDueToday(t)
+  );
 
   const priorityIcon = (p: string) => {
     if (p === 'Critical' || p === 'High') return '🔴';
@@ -110,33 +131,26 @@ export function generateWhatsAppSummary(tasks: Task[], employees: { id: string; 
     return '🟢';
   };
 
-  let msg = `⚠️ *Tirtam Daily Operations Summary*\n\n`;
-  msg += `📌 Pending Tasks: ${pending.length}\n`;
-  msg += `✅ Completed Tasks: ${completed.length}\n`;
-  msg += `🔴 High Priority: ${highPriority.length}\n`;
-  msg += `🟡 Medium Priority: ${mediumPriority.length}\n`;
-  msg += `🟢 Low Priority: ${lowPriority.length}\n`;
+  const dateStr = format(new Date(), 'EEEE, MMMM d');
+  let msg = `📅 *Tirtam — Today's Tasks*\n${dateStr}\n\n`;
+  msg += `📋 *Tasks due today:* ${todayTasks.length}\n`;
 
-  const sorted = [...active].sort((a, b) => {
-    const order: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-    return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
-  });
+  if (todayTasks.length === 0) {
+    msg += `\nNo tasks due today.`;
+  } else {
+    const sorted = [...todayTasks].sort((a, b) => {
+      const order: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+      return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
+    });
 
-  for (const t of sorted) {
-    const icon = priorityIcon(t.priority);
-    msg += `\n---\n\n`;
-    msg += `${icon} *Owner:* ${getOwnerName(t.owner)}\n`;
-    msg += `*Task:* ${t.name}\n`;
-    msg += `*Department:* ${t.department}\n`;
-    msg += `*Priority:* ${t.priority}\n`;
-    msg += `*Due Date:* ${formatDueDate(t.deadline)}\n`;
-    msg += `*Status:* ${t.status}`;
-  }
-
-  if (unassigned.length > 0) {
-    msg += `\n\n---\n\n📋 *Upcoming Tasks (Unassigned):* ${unassigned.length}\n`;
-    for (const t of unassigned) {
-      msg += `\n• ${t.name} — ${t.department} [${t.priority}]`;
+    for (const t of sorted) {
+      const icon = priorityIcon(t.priority);
+      msg += `\n---\n\n`;
+      msg += `${icon} *Owner:* ${getOwnerName(t.owner)}\n`;
+      msg += `*Task:* ${t.name}\n`;
+      msg += `*Department:* ${t.department}\n`;
+      msg += `*Priority:* ${t.priority}\n`;
+      msg += `*Status:* ${t.status}`;
     }
   }
 
