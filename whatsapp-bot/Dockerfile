@@ -23,20 +23,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon0 \
     libxrandr2 \
     xdg-utils \
-    && wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
-    && apt-get install -y /tmp/google-chrome.deb \
-    && rm /tmp/google-chrome.deb \
+    chromium \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi
 
 COPY index.js ./
 
 ENV NODE_ENV=production
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV WHATSAPP_SESSION_PATH=/data/whatsapp-session
 
 EXPOSE 3001

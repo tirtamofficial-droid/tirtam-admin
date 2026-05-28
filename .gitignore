@@ -17,6 +17,10 @@ dist-ssr
 .env.*
 !.env.example
 whatsapp-bot/.env
+whatsapp-bot/whatsapp-session/
+whatsapp-bot/.wwebjs_cache/
+whatsapp-bot/bot.log
+whatsapp-bot/bot.pid
 
 # Editor directories and files
 .vscode/*

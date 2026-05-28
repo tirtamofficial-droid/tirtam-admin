@@ -65,8 +65,10 @@ The bot must run as a long-lived process (WhatsApp session + daily cron). Do **n
 1. Go to [railway.app](https://railway.app) and sign in
 2. **New Project** → **Deploy from GitHub repo**
 3. Select your repository
-4. **Root Directory:** `whatsapp-bot`
-5. Railway detects `Dockerfile` and `railway.json` automatically
+4. **Root Directory:** `whatsapp-bot` (no extra path prefix)
+5. **Config file path:** leave **empty**, OR set to `railway.json` only — **not** `whatsapp-bot/railway.json` (that path is only when root is the repo `.`)
+
+> **Common error:** `service config at 'whatsapp-bot/railway.json' not found` — you set Root Directory to `whatsapp-bot` *and* Config file to `whatsapp-bot/railway.json`. Fix: clear Config file path or use `railway.json`.
 
 ### 2. Environment variables
 
@@ -188,6 +190,7 @@ Local bot URL: `http://localhost:3001` (default in frontend if `VITE_WHATSAPP_BO
 | QR keeps appearing | Volume not mounted or wrong `WHATSAPP_SESSION_PATH` |
 | Chrome / Puppeteer errors in Railway logs | Rebuild Docker image; confirm `PUPPETEER_EXECUTABLE_PATH` |
 | Missing env on startup | Bot exits with message if `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` missing |
+| `whatsapp-bot/railway.json` not found | Root is already `whatsapp-bot` → set Config file to `railway.json` or blank, not `whatsapp-bot/railway.json` |
 | Group not found | Use `/groups` endpoint or pick group name from dashboard after connect |
 
 ---
