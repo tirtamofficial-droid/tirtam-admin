@@ -15,6 +15,9 @@ import LoginPage from './pages/LoginPage';
 import ComingSoonPage from './pages/ComingSoonPage';
 import FinancePage from './pages/FinancePage';
 import VendorsPage from './pages/VendorsPage';
+import ProductKitsPage from './pages/ProductKitsPage';
+import NotesPage from './pages/NotesPage';
+import ProductsPage from './pages/ProductsPage';
 
 // Clean up old localStorage keys from previous versions
 localStorage.removeItem('tirtam-store');
@@ -57,13 +60,14 @@ function AuthenticatedApp() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/whatsapp" element={isAdmin ? <WhatsAppPage /> : <Navigate to="/employee" />} />
             <Route path="/finance" element={<FinancePage />} />
-            <Route path="/product-kits" element={<ComingSoonPage title="Product Kits" description="Define what goes into each kit — products, crystals, packaging, and pricing. Plan your kit offerings here." icon="🎁" />} />
+            <Route path="/product-kits" element={<ProductKitsPage />} />
             <Route path="/crystals" element={<ComingSoonPage title="Crystals & Products" description="Decide what kinds of crystals and spiritual products Tirtam will carry. Catalog your collection here." icon="💎" />} />
-            <Route path="/products" element={<ComingSoonPage title="Products" description="Full catalog of all products Tirtam will sell — prices, SKUs, descriptions, and availability." icon="🛍️" />} />
+            <Route path="/products" element={<ProductsPage />} />
             <Route path="/vendors" element={<VendorsPage />} />
             <Route path="/weekly-focus" element={<ComingSoonPage title="Weekly Focus" description="Every Monday, surface the top 3 priorities per department. Keep the team aligned on what matters most this week." icon="📅" />} />
             <Route path="/decisions" element={<ComingSoonPage title="Decision Log" description="Record key company decisions — what was decided, who made the call, and why. Never lose context on important choices." icon="📝" />} />
             <Route path="/goals" element={<ComingSoonPage title="Goals & OKRs" description="Set company-level objectives and track progress against them. Tie tasks to goals for full execution visibility." icon="🎯" />} />
+            <Route path="/notes" element={<NotesPage />} />
             <Route path="/resources" element={<ComingSoonPage title="Resource Vault" description="One place for contracts, brand kit, vendor documents, legal files, and important links. Everything your team needs, always findable." icon="📁" />} />
             <Route path="/department" element={<Navigate to="/tasks" />} />
             <Route path="*" element={<Navigate to="/" />} />

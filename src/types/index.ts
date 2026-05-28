@@ -7,7 +7,7 @@ export type Department =
   | 'Vendor & Procurement'
   | 'Website';
 
-export type TaskStatus = 'Pending' | 'In Progress' | 'Blocked' | 'Review' | 'Completed';
+export type TaskStatus = 'Not started' | 'In Progress' | 'Blocked' | 'Review' | 'Completed';
 
 export type Priority = 'Critical' | 'High' | 'Medium' | 'Low';
 

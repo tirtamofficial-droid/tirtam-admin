@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
-import { statusColors, priorityColors, formatDate, isOverdue, statuses, priorities } from '../utils/helpers';
-import type { Task, TaskStatus, Priority } from '../types';
+import { statusColors, priorityColors, formatDate, isOverdue, statuses, priorities, statusOrder } from '../utils/helpers';
+import type { Task, Priority } from '../types';
 import { MoreHorizontal, Pencil, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface Props {
@@ -13,7 +13,6 @@ type SortKey = 'name' | 'priority' | 'status' | 'deadline' | 'owner' | 'updatedA
 type SortDir = 'asc' | 'desc';
 
 const priorityOrder: Record<Priority, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-const statusOrder: Record<TaskStatus, number> = { Pending: 0, 'In Progress': 1, Blocked: 2, Review: 3, Completed: 4 };
 
 export default function TaskTable({ tasks, enableHeaderSort = true }: Props) {
   const { employees, updateTask, deleteTask, setEditingTask, setTaskModalOpen } = useStore();

@@ -36,7 +36,7 @@ export function isDueThisWeek(task: Task): boolean {
 }
 
 export const statusColors: Record<TaskStatus, { bg: string; text: string; dot: string }> = {
-  'Pending': { bg: 'bg-slate-100', text: 'text-slate-700', dot: 'bg-slate-400' },
+  'Not started': { bg: 'bg-slate-100', text: 'text-slate-700', dot: 'bg-slate-400' },
   'In Progress': { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
   'Blocked': { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
   'Review': { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
@@ -70,14 +70,20 @@ export const departments: Department[] = [
   'Website',
 ];
 
-export const statuses: TaskStatus[] = ['Pending', 'In Progress', 'Blocked', 'Review', 'Completed'];
+export const statuses: TaskStatus[] = ['In Progress', 'Not started', 'Blocked', 'Review', 'Completed'];
 export const priorities: Priority[] = ['Critical', 'High', 'Medium', 'Low'];
 
 export type TaskSortKey = 'name' | 'priority' | 'status' | 'deadline' | 'owner' | 'updatedAt';
 export type TaskSortDir = 'asc' | 'desc';
 
 const priorityOrder: Record<Priority, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-const statusOrder: Record<TaskStatus, number> = { Pending: 0, 'In Progress': 1, Blocked: 2, Review: 3, Completed: 4 };
+export const statusOrder: Record<TaskStatus, number> = { 'In Progress': 0, 'Not started': 1, Blocked: 2, Review: 3, Completed: 4 };
+
+export function compareTasksByStatusThenPriority(a: Task, b: Task): number {
+  const statusCmp = statusOrder[a.status] - statusOrder[b.status];
+  if (statusCmp !== 0) return statusCmp;
+  return priorityOrder[a.priority] - priorityOrder[b.priority];
+}
 
 export function sortTasks(
   tasks: Task[],
@@ -114,46 +120,55 @@ export function getCompletionPercentage(tasks: Task[]): number {
   return Math.round((completed / tasks.length) * 100);
 }
 
-export function generateWhatsAppSummary(tasks: Task[], employees: { id: string; name: string }[]): string {
-  const getOwnerName = (id: string) => {
-    const emp = employees.find((e) => e.id === id);
-    return emp ? emp.name.split(' ')[0] : '';
+function formatWhatsAppDueDate(deadline: string): string {
+  if (!deadline) return 'No date';
+  const dl = new Date(deadline);
+  if (isToday(dl)) return 'Today';
+  if (isPast(dl)) return 'Overdue';
+  const day = dl.getDate();
+  const suffix =
+    day % 10 === 1 && day !== 11 ? 'st'
+    : day % 10 === 2 && day !== 12 ? 'nd'
+    : day % 10 === 3 && day !== 13 ? 'rd'
+    : 'th';
+  return `${day}${suffix} ${format(dl, 'MMMM')}`;
+}
+
+export function generateWhatsAppSummary(tasks: Task[], employees: { id: string; name: string; avatar?: string }[]): string {
+  const getOwnerFullName = (id: string) => employees.find((e) => e.id === id)?.name || 'Unassigned';
+  const getOwnerEmoji = (id: string) => {
+    const avatar = employees.find((e) => e.id === id)?.avatar?.trim();
+    if (avatar && /\p{Extended_Pictographic}/u.test(avatar)) return avatar;
+    return '👤';
   };
 
   const hasOwner = (t: Task) => t.owner && t.owner.trim() !== '';
-  const todayTasks = tasks.filter(
-    (t) => t.status !== 'Completed' && hasOwner(t) && isDueToday(t)
-  );
+  const activeTasks = tasks.filter((t) => hasOwner(t) && t.status !== 'Completed');
+  const pending = tasks.filter((t) => !hasOwner(t) && t.status !== 'Completed').length;
+  const completed = tasks.filter((t) => t.status === 'Completed').length;
+  const inProgress = tasks.filter((t) => t.status === 'In Progress').length;
+  const notStarted = tasks.filter((t) => t.status === 'Not started').length;
 
-  const priorityIcon = (p: string) => {
-    if (p === 'Critical' || p === 'High') return '🔴';
-    if (p === 'Medium') return '🟡';
-    return '🟢';
-  };
+  const sorted = [...activeTasks].sort(compareTasksByStatusThenPriority);
 
-  const dateStr = format(new Date(), 'EEEE, MMMM d');
-  let msg = `📅 *Tirtam — Today's Tasks*\n${dateStr}\n\n`;
-  msg += `📋 *Tasks due today:* ${todayTasks.length}\n`;
+  let msg = `📊 *Stats*\n`;
+  msg += `📋 *Pending:* ${pending}\n`;
+  msg += `✅ *Completed:* ${completed}\n`;
+  msg += `🔄 *In Progress:* ${inProgress}\n`;
+  msg += `⏳ *Not started:* ${notStarted}\n\n`;
+  msg += `📋 *Today's tasks:*\n\n`;
 
-  if (todayTasks.length === 0) {
-    msg += `\nNo tasks due today.`;
+  if (sorted.length === 0) {
+    msg += `No tasks in progress.`;
   } else {
-    const sorted = [...todayTasks].sort((a, b) => {
-      const order: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-      return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
-    });
-
     for (const t of sorted) {
-      const icon = priorityIcon(t.priority);
-      msg += `\n---\n\n`;
-      msg += `${icon} *Owner:* ${getOwnerName(t.owner)}\n`;
-      msg += `*Task:* ${t.name}\n`;
-      msg += `*Department:* ${t.department}\n`;
-      msg += `*Priority:* ${t.priority}\n`;
-      msg += `*Status:* ${t.status}`;
+      const ownerEmoji = getOwnerEmoji(t.owner);
+      msg += `${ownerEmoji} *${getOwnerFullName(t.owner)}:* ${t.name}\n`;
+      msg += `*Department:* ${t.department}. *Priority:* ${t.priority}\n`;
+      msg += `*Due date:* ${formatWhatsAppDueDate(t.deadline)}. *Status:* ${t.status}\n\n`;
     }
   }
 
-  msg += `\n\n---\n\n_Sent by Tirtam OS_`;
-  return msg;
+  msg += `_Sent by Tirtam OS_`;
+  return msg.trim();
 }

@@ -11,7 +11,7 @@ export default function FounderDashboard() {
   const unassignedTasks = tasks.filter((t) => !hasOwner(t));
   const assignedTasks = tasks.filter(hasOwner);
   const activeTasks = assignedTasks.filter((t) => t.status !== 'Completed');
-  const pending = assignedTasks.filter((t) => t.status === 'Pending');
+  const notStarted = assignedTasks.filter((t) => t.status === 'Not started');
   const inProgress = assignedTasks.filter((t) => t.status === 'In Progress');
   const blocked = assignedTasks.filter((t) => t.status === 'Blocked');
   const review = assignedTasks.filter((t) => t.status === 'Review');
@@ -28,8 +28,8 @@ export default function FounderDashboard() {
 
   const stats = [
     { label: 'Total Tasks', value: tasks.length, icon: <BarChart3 size={18} />, color: 'text-zinc-600', bg: 'bg-zinc-50' },
-    { label: 'Pending', value: pending.length, icon: <Clock size={18} />, color: 'text-amber-600', bg: 'bg-amber-50' },
     { label: 'In Progress', value: inProgress.length, icon: <TrendingUp size={18} />, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Not started', value: notStarted.length, icon: <Clock size={18} />, color: 'text-amber-600', bg: 'bg-amber-50' },
     { label: 'Blocked', value: blocked.length, icon: <AlertTriangle size={18} />, color: 'text-red-600', bg: 'bg-red-50' },
     { label: 'In Review', value: review.length, icon: <Target size={18} />, color: 'text-purple-600', bg: 'bg-purple-50' },
     { label: 'Overdue', value: overdue.length, icon: <Flame size={18} />, color: 'text-red-600', bg: 'bg-red-50' },

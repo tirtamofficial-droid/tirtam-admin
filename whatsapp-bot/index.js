@@ -148,78 +148,93 @@ async function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-function isDueToday(deadline) {
-  if (!deadline) return false;
-  const d = new Date(deadline);
-  const now = new Date();
-  return (
-    d.getDate() === now.getDate() &&
-    d.getMonth() === now.getMonth() &&
-    d.getFullYear() === now.getFullYear()
-  );
-}
-
 // ============================================================
 // TASK SCANNER + SUMMARY GENERATOR
 // ============================================================
 async function scanTasksAndGenerateSummary() {
   const [tasksRes, employeesRes] = await Promise.all([
     supabase.from('tasks').select('*'),
-    supabase.from('employees').select('id, name'),
+    supabase.from('employees').select('id, name, avatar'),
   ]);
 
   const allTasks = tasksRes.data || [];
   const employees = employeesRes.data || [];
-  const getOwnerName = (id) => {
+  const getOwnerFullName = (id) => {
     const emp = employees.find(e => e.id === id);
-    return emp ? emp.name.split(' ')[0] : '';
+    return emp ? emp.name : 'Unassigned';
+  };
+  const getOwnerEmoji = (id) => {
+    const avatar = employees.find(e => e.id === id)?.avatar?.trim();
+    if (avatar && /\p{Extended_Pictographic}/u.test(avatar)) return avatar;
+    return '👤';
   };
 
   const hasOwner = (t) => t.owner && t.owner.trim() !== '';
-  const todayTasks = allTasks.filter(
-    (t) => t.status !== 'Completed' && hasOwner(t) && isDueToday(t.deadline)
-  );
+  const activeTasks = allTasks.filter((t) => hasOwner(t) && t.status !== 'Completed');
+  const pending = allTasks.filter((t) => !hasOwner(t) && t.status !== 'Completed').length;
+  const completed = allTasks.filter((t) => t.status === 'Completed').length;
+  const inProgress = allTasks.filter((t) => t.status === 'In Progress').length;
+  const notStarted = allTasks.filter((t) => t.status === 'Not started').length;
 
   const now = new Date();
-  const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric' });
+  const isTodayDate = (dl) =>
+    dl.getDate() === now.getDate() &&
+    dl.getMonth() === now.getMonth() &&
+    dl.getFullYear() === now.getFullYear();
+  const isPastDate = (dl) => dl < now && !isTodayDate(dl);
 
-  const priorityIcon = (p) => {
-    if (p === 'Critical' || p === 'High') return '🔴';
-    if (p === 'Medium') return '🟡';
-    return '🟢';
+  const formatDueDateOrdinal = (deadline) => {
+    if (!deadline) return 'No date';
+    const dl = new Date(deadline);
+    if (isTodayDate(dl)) return 'Today';
+    if (isPastDate(dl)) return 'Overdue';
+    const day = dl.getDate();
+    const suffix =
+      day % 10 === 1 && day !== 11 ? 'st'
+      : day % 10 === 2 && day !== 12 ? 'nd'
+      : day % 10 === 3 && day !== 13 ? 'rd'
+      : 'th';
+    const month = dl.toLocaleDateString('en-IN', { month: 'long' });
+    return `${day}${suffix} ${month}`;
   };
 
-  let msg = `📅 *Tirtam — Today's Tasks*\n${dateStr}\n\n`;
-  msg += `📋 *Tasks due today:* ${todayTasks.length}\n`;
+  const sorted = [...activeTasks].sort((a, b) => {
+    const statusOrder = { 'In Progress': 0, 'Not started': 1, Blocked: 2, Review: 3, Completed: 4 };
+    const statusCmp = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
+    if (statusCmp !== 0) return statusCmp;
+    const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+    return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
+  });
 
-  if (todayTasks.length === 0) {
-    msg += `\nNo tasks due today.`;
+  let msg = `📊 *Stats*\n`;
+  msg += `📋 *Pending:* ${pending}\n`;
+  msg += `✅ *Completed:* ${completed}\n`;
+  msg += `🔄 *In Progress:* ${inProgress}\n`;
+  msg += `⏳ *Not started:* ${notStarted}\n\n`;
+  msg += `📋 *Today's tasks:*\n\n`;
+
+  if (sorted.length === 0) {
+    msg += `No tasks in progress.`;
   } else {
-    const taskList = todayTasks.sort((a, b) => {
-      const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-      return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
-    });
-
-    for (const t of taskList) {
-      const icon = priorityIcon(t.priority);
-      const ownerName = getOwnerName(t.owner);
-
-      msg += `\n---\n\n`;
-      msg += `${icon} *Owner:* ${ownerName}\n`;
-      msg += `*Task:* ${t.name}\n`;
-      msg += `*Department:* ${t.department}\n`;
-      msg += `*Priority:* ${t.priority}\n`;
-      msg += `*Status:* ${t.status}`;
+    for (const t of sorted) {
+      const ownerEmoji = getOwnerEmoji(t.owner);
+      msg += `${ownerEmoji} *${getOwnerFullName(t.owner)}:* ${t.name}\n`;
+      msg += `*Department:* ${t.department}. *Priority:* ${t.priority}\n`;
+      msg += `*Due date:* ${formatDueDateOrdinal(t.deadline)}. *Status:* ${t.status}\n\n`;
     }
   }
 
-  msg += `\n\n---\n\n_Sent by Tirtam OS_`;
+  msg += `_Sent by Tirtam OS_`;
 
   return {
     summary: msg,
     stats: {
       total: allTasks.length,
-      todayTasks: todayTasks.length,
+      pending,
+      completed,
+      inProgress,
+      notStarted,
+      activeTasks: activeTasks.length,
     },
   };
 }

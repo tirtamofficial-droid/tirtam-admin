@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
-import { departmentIcons, departments, getCompletionPercentage, isOverdue, priorityColors, sortTasks, type TaskSortDir, type TaskSortKey } from '../utils/helpers';
+import { departmentIcons, departments, getCompletionPercentage, isOverdue, priorityColors, sortTasks, statusOrder, type TaskSortDir, type TaskSortKey } from '../utils/helpers';
 import TaskTable from '../components/TaskTable';
 import FilterBar from '../components/FilterBar';
 import SortBar from '../components/SortBar';
@@ -8,7 +8,7 @@ import type { Department, Task, TaskStatus, ViewMode } from '../types';
 import { Table, Clock, CheckCircle2, Flame, Plus, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 
 const statusColors: Record<TaskStatus, string> = {
-  'Pending': 'bg-zinc-100 text-zinc-600',
+  'Not started': 'bg-zinc-100 text-zinc-600',
   'In Progress': 'bg-blue-50 text-blue-700',
   'Blocked': 'bg-red-50 text-red-600',
   'Review': 'bg-amber-50 text-amber-700',
@@ -17,7 +17,7 @@ const statusColors: Record<TaskStatus, string> = {
 
 const views: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
   { id: 'table', label: 'Table', icon: <Table size={14} /> },
-  { id: 'pending', label: 'Pending', icon: <Clock size={14} /> },
+  { id: 'pending', label: 'Not started', icon: <Clock size={14} /> },
   { id: 'high-priority', label: 'High Priority', icon: <Flame size={14} /> },
   { id: 'completed', label: 'Completed', icon: <CheckCircle2 size={14} /> },
 ];
@@ -295,9 +295,9 @@ function SectionedView({ tasks }: { tasks: Task[] }) {
   const { updateTask } = useStore();
 
   // Owner-based sectioning
-  const inProgress = tasks.filter(
-    (t) => t.status !== 'Completed' && t.owner && t.owner.trim() !== ''
-  );
+  const inProgress = tasks
+    .filter((t) => t.status !== 'Completed' && t.owner && t.owner.trim() !== '')
+    .sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
   const upcoming = tasks.filter(
     (t) => t.status !== 'Completed' && (!t.owner || t.owner.trim() === '')
   );
@@ -331,7 +331,7 @@ function SectionedView({ tasks }: { tasks: Task[] }) {
 
         {inProgress.length === 0 ? (
           <div className="bg-zinc-50 border border-dashed border-zinc-200 rounded-xl py-5 text-center">
-            <p className="text-[12px] text-zinc-400">No tasks in progress — assign an owner to a pending task to move it here</p>
+            <p className="text-[12px] text-zinc-400">No tasks in progress — assign an owner to a not started task to move it here</p>
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-zinc-100 overflow-hidden w-full">
@@ -424,7 +424,7 @@ export default function DepartmentPage() {
   let filtered = getFilteredTasks(activeDepartment);
 
   switch (activeView) {
-    case 'pending': filtered = filtered.filter((t) => t.status === 'Pending'); break;
+    case 'pending': filtered = filtered.filter((t) => t.status === 'Not started'); break;
     case 'high-priority': filtered = filtered.filter((t) => t.priority === 'Critical' || t.priority === 'High'); break;
     case 'completed': filtered = filtered.filter((t) => t.status === 'Completed'); break;
   }

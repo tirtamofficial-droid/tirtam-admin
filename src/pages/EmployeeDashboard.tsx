@@ -1,6 +1,6 @@
 import { useStore } from '../store/useStore';
 import { useAuth } from '../lib/auth';
-import { isOverdue, isDueToday, isDueThisWeek, formatDate, statusColors, priorityColors, getCompletionPercentage } from '../utils/helpers';
+import { isOverdue, isDueToday, isDueThisWeek, formatDate, statusColors, priorityColors, getCompletionPercentage, statusOrder } from '../utils/helpers';
 import type { Task, Priority } from '../types';
 import { Clock, AlertTriangle, CheckCircle2, Flame, CalendarDays, TrendingUp, ListTodo } from 'lucide-react';
 
@@ -15,6 +15,9 @@ function sortCurrentTasks(tasks: Task[]) {
     const aToday = isDueToday(a) ? 0 : 1;
     const bToday = isDueToday(b) ? 0 : 1;
     if (aToday !== bToday) return aToday - bToday;
+
+    const statusCmp = statusOrder[a.status] - statusOrder[b.status];
+    if (statusCmp !== 0) return statusCmp;
 
     const pri = priorityOrder[a.priority] - priorityOrder[b.priority];
     if (pri !== 0) return pri;
@@ -47,7 +50,7 @@ export default function EmployeeDashboard() {
   const taskHighlight = (task: Task) => {
     if (isOverdue(task)) return 'border-l-red-500 bg-red-50/40 hover:bg-red-50/70';
     if (isDueToday(task)) return 'border-l-amber-500 bg-amber-50/40 hover:bg-amber-50/70';
-    if (task.status === 'Pending') return 'border-l-indigo-500 bg-indigo-50/30 hover:bg-indigo-50/50';
+    if (task.status === 'Not started') return 'border-l-indigo-500 bg-indigo-50/30 hover:bg-indigo-50/50';
     return 'border-l-zinc-300 bg-white hover:bg-zinc-50/80';
   };
 
@@ -81,7 +84,7 @@ export default function EmployeeDashboard() {
             </div>
             <div className="min-w-0">
               <h2 className="text-[16px] font-semibold text-zinc-900">Your Current Tasks</h2>
-              <p className="text-[12px] text-indigo-600/80 mt-0.5">Pending & active work assigned to you</p>
+              <p className="text-[12px] text-indigo-600/80 mt-0.5">Active work assigned to you</p>
             </div>
           </div>
           <span className="flex-shrink-0 text-[12px] font-bold text-indigo-700 bg-indigo-100 px-2.5 py-1 rounded-full">
@@ -94,7 +97,7 @@ export default function EmployeeDashboard() {
             <div className="flex flex-col items-center py-10 text-center">
               <CheckCircle2 size={32} className="text-emerald-400 mb-2" />
               <p className="text-[14px] font-medium text-zinc-600">You're all caught up!</p>
-              <p className="text-[12px] text-zinc-400 mt-1">No pending tasks right now</p>
+              <p className="text-[12px] text-zinc-400 mt-1">No active tasks right now</p>
             </div>
           ) : (
             myCurrentTasks.map((task) => {

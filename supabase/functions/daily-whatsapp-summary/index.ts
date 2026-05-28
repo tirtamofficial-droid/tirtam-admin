@@ -34,7 +34,7 @@ function generateSummary(tasks: Task[], employees: Employee[]): string {
   const dateStr = now.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
 
   const active = tasks.filter(t => t.status !== 'Completed');
-  const pending = tasks.filter(t => t.status === 'Pending');
+  const notStarted = tasks.filter(t => t.status === 'Not started');
   const overdue = tasks.filter(t => t.status !== 'Completed' && new Date(t.deadline) < now);
   const blocked = tasks.filter(t => t.status === 'Blocked');
   const highPriority = active.filter(t => t.priority === 'Critical' || t.priority === 'High');
@@ -50,7 +50,7 @@ function generateSummary(tasks: Task[], employees: Employee[]): string {
 
   msg += `📊 *Quick Stats*\n`;
   msg += `• Total Active: ${active.length}\n`;
-  msg += `• Pending: ${pending.length}\n`;
+  msg += `• Not started: ${notStarted.length}\n`;
   msg += `• Overdue: ${overdue.length}\n`;
   msg += `• Blocked: ${blocked.length}\n\n`;
 

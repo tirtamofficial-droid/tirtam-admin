@@ -42,10 +42,11 @@ export default function Sidebar() {
   const businessModules: { path: string; label: string; icon: string; ready?: boolean }[] = [
     { path: '/finance', label: 'Expense', icon: '💰', ready: true },
     { path: '/vendors', label: 'Vendors', icon: '🤝', ready: true },
-    { path: '/product-kits', label: 'Product Kits', icon: '🎁' },
+    { path: '/product-kits', label: 'Product Kits', icon: '🎁', ready: true },
     { path: '/crystals', label: 'Crystals & Products', icon: '💎' },
-    { path: '/products', label: 'Products', icon: '🛍️' },
+    { path: '/products', label: 'Products', icon: '🛍️', ready: true },
     { path: '/weekly-focus', label: 'Weekly Focus', icon: '📅' },
+    { path: '/notes', label: 'Notes', icon: '📋', ready: true },
     { path: '/decisions', label: 'Decision Log', icon: '📝' },
     { path: '/goals', label: 'Goals & OKRs', icon: '🎯' },
     { path: '/resources', label: 'Resource Vault', icon: '📁' },

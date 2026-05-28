@@ -377,7 +377,7 @@ function buildTasks() {
         owner: null,
         department: 'Website',
         priority: section.priority,
-        status: 'Pending',
+        status: 'Not started',
         deadline: daysFromNow(dayOffset),
         notes: '',
         dependencies: [],
