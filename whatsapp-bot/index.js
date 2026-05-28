@@ -251,22 +251,59 @@ async function scanTasksAndGenerateSummary() {
   };
 }
 
+function scoreGroupMatch(groupName, query) {
+  const n = groupName.trim().toLowerCase();
+  const q = query.trim().toLowerCase();
+  if (!q) return 0;
+  if (n === q) return 100;
+  if (n.startsWith(`${q} `) || n.startsWith(`${q}-`) || n.startsWith(`${q}(`)) return 90;
+  if (n.startsWith(q)) {
+    if (n.length === q.length) return 100;
+    const next = n.charAt(q.length);
+    if (/[\s\-_|(]/.test(next)) return 85;
+    return 0;
+  }
+  if (n.includes(q)) return 50;
+  return 0;
+}
+
+function findWhatsAppGroup(chats, groupName) {
+  const query = groupName?.trim();
+  if (!query) return null;
+
+  const matches = chats
+    .filter((c) => c.isGroup)
+    .map((group) => ({ group, score: scoreGroupMatch(group.name, query) }))
+    .filter((m) => m.score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.group.name.length - b.group.name.length;
+    });
+
+  return matches[0]?.group ?? null;
+}
+
 async function sendSummaryToGroup(groupName) {
   if (whatsappStatus !== 'connected') {
     return { success: false, error: 'WhatsApp not connected. Scan QR code first.' };
+  }
+
+  const targetName = (groupName || '').trim();
+  if (!targetName) {
+    return { success: false, error: 'Group name is required.' };
   }
 
   try {
     const { summary, stats } = await scanTasksAndGenerateSummary();
 
     const chats = await client.getChats();
-    const group = chats.find(c => c.isGroup && c.name.toLowerCase().includes(groupName.toLowerCase()));
+    const group = findWhatsAppGroup(chats, targetName);
 
     if (!group) {
       const groupNames = chats.filter(c => c.isGroup).map(c => c.name);
       return {
         success: false,
-        error: `Group "${groupName}" not found. Available groups: ${groupNames.join(', ')}`,
+        error: `Group "${targetName}" not found. Available groups: ${groupNames.join(', ')}`,
         availableGroups: groupNames,
       };
     }
@@ -341,7 +378,13 @@ app.get('/qr', (req, res) => {
 });
 
 app.post('/send-summary', async (req, res) => {
-  const groupName = req.body.groupName || 'Tirtam';
+  let groupName = req.body.groupName?.trim();
+
+  if (!groupName) {
+    const { data: config } = await supabase.from('whatsapp_config').select('group_name').single();
+    groupName = config?.group_name?.trim() || 'Tirtam';
+  }
+
   const result = await sendSummaryToGroup(groupName);
   res.json(result);
 });
@@ -372,9 +415,11 @@ async function setupCron() {
   if (config?.enabled) {
     const cronExpr = `${minute} ${hour} * * *`;
     cron.schedule(cronExpr, async () => {
-      console.log(`\n[CRON] Running daily summary at ${new Date().toISOString()}`);
-      const result = await sendSummaryToGroup(groupName);
-      console.log('[CRON] Result:', result.success ? 'Sent!' : result.error);
+      const { data: latest } = await supabase.from('whatsapp_config').select('group_name').single();
+      const cronGroupName = latest?.group_name?.trim() || groupName;
+      console.log(`\n[CRON] Running daily summary at ${new Date().toISOString()} → "${cronGroupName}"`);
+      const result = await sendSummaryToGroup(cronGroupName);
+      console.log('[CRON] Result:', result.success ? `Sent to ${result.groupName}` : result.error);
     });
     console.log(`Daily cron scheduled at ${sendTime} for group "${groupName}"`);
   } else {

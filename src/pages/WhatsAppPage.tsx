@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import { generateWhatsAppSummary } from '../utils/helpers';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import type { WhatsAppConfig } from '../types';
 import { MessageSquare, Send, Clock, Copy, Check, Smartphone, Settings, Zap, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
 const BOT_URL = import.meta.env.VITE_WHATSAPP_BOT_URL || 'http://localhost:3001';
@@ -22,6 +24,41 @@ export default function WhatsAppPage() {
   const [groups, setGroups] = useState<{ name: string; id: string }[]>([]);
 
   const summary = generateWhatsAppSummary(tasks, employees);
+
+  const persistConfig = useCallback(async (patch: Partial<WhatsAppConfig>) => {
+    const next = { ...useStore.getState().whatsappConfig, ...patch };
+    setWhatsAppConfig(patch);
+    if (!isSupabaseConfigured) return;
+
+    await supabase
+      .from('whatsapp_config')
+      .update({
+        enabled: next.enabled,
+        send_time: next.sendTime,
+        group_name: next.groupName.trim(),
+        updated_at: new Date().toISOString(),
+      })
+      .neq('id', '');
+  }, [setWhatsAppConfig]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    supabase
+      .from('whatsapp_config')
+      .select('*')
+      .single()
+      .then(({ data }) => {
+        if (!data) return;
+        setWhatsAppConfig({
+          enabled: data.enabled,
+          sendTime: data.send_time,
+          groupName: data.group_name,
+          phoneNumber: data.phone_number || '',
+          lastSent: data.last_sent,
+        });
+      });
+  }, [setWhatsAppConfig]);
 
   const checkBotStatus = useCallback(async () => {
     try {
@@ -61,7 +98,7 @@ export default function WhatsAppPage() {
       const res = await fetch(`${BOT_URL}/send-summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupName: whatsappConfig.groupName }),
+        body: JSON.stringify({ groupName: whatsappConfig.groupName.trim() }),
       });
       const data = await res.json();
       setSendResult({
@@ -194,7 +231,7 @@ export default function WhatsAppPage() {
               <div className="flex items-center justify-between">
                 <label className="text-[13px] text-text-secondary">Enable Daily Summary</label>
                 <button
-                  onClick={() => setWhatsAppConfig({ enabled: !whatsappConfig.enabled })}
+                  onClick={() => persistConfig({ enabled: !whatsappConfig.enabled })}
                   className={`relative w-11 h-6 rounded-full transition-colors ${whatsappConfig.enabled ? 'bg-green-500' : 'bg-slate-300'}`}
                 >
                   <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-all ${whatsappConfig.enabled ? 'left-[22px]' : 'left-0.5'}`} />
@@ -206,7 +243,7 @@ export default function WhatsAppPage() {
                 <input
                   type="time"
                   value={whatsappConfig.sendTime}
-                  onChange={(e) => setWhatsAppConfig({ sendTime: e.target.value })}
+                  onChange={(e) => persistConfig({ sendTime: e.target.value })}
                   className="w-full px-3 py-2 text-[13px] border border-border rounded-lg focus:outline-none focus:border-primary/50"
                 />
               </div>
@@ -217,9 +254,13 @@ export default function WhatsAppPage() {
                   type="text"
                   value={whatsappConfig.groupName}
                   onChange={(e) => setWhatsAppConfig({ groupName: e.target.value })}
+                  onBlur={(e) => persistConfig({ groupName: e.target.value })}
                   className="w-full px-3 py-2 text-[13px] border border-border rounded-lg focus:outline-none focus:border-primary/50"
-                  placeholder="Tirtam"
+                  placeholder="Exact group name, e.g. Tirtam"
                 />
+                <p className="text-[10px] text-text-tertiary mt-1.5">
+                  Tip: pick from the list below for an exact match. Typing &quot;Tirtam&quot; will not match &quot;Tirtamtest&quot;.
+                </p>
                 {groups.length > 0 && (
                   <div className="mt-2">
                     <p className="text-[10px] text-text-tertiary mb-1">Available groups:</p>
@@ -227,7 +268,7 @@ export default function WhatsAppPage() {
                       {groups.map((g) => (
                         <button
                           key={g.id}
-                          onClick={() => setWhatsAppConfig({ groupName: g.name })}
+                          onClick={() => persistConfig({ groupName: g.name })}
                           className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
                             whatsappConfig.groupName === g.name
                               ? 'bg-green-50 border-green-300 text-green-700'
