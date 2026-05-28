@@ -89,8 +89,6 @@ export function generateWhatsAppSummary(tasks: Task[], employees: { id: string; 
   const assignedTasks = tasks.filter(hasOwner);
   const unassigned = tasks.filter((t) => !hasOwner(t));
 
-  const now = new Date();
-
   const pending = assignedTasks.filter((t) => t.status === 'Pending');
   const completed = assignedTasks.filter((t) => t.status === 'Completed');
   const active = assignedTasks.filter((t) => t.status !== 'Completed');
