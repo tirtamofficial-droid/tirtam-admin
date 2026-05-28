@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Secrets
+.env
+.env.*
+!.env.example
+whatsapp-bot/.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

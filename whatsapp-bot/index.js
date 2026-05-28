@@ -11,9 +11,34 @@ const http = require('http');
 // ============================================================
 // CONFIG
 // ============================================================
-const PORT = 3001;
-const SUPABASE_URL = 'https://hwiilzqgnrzzphccbfyl.supabase.co';
-const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3aWlsenFnbnJ6enBoY2NiZnlsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTk0NDExNiwiZXhwIjoyMDk1NTIwMTE2fQ.GX-9JCVYpQs_C4eefo1tvjd5cbkjKWSJE7Pz6JIaiUA';
+const PORT = process.env.PORT || 3001;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SESSION_PATH = process.env.WHATSAPP_SESSION_PATH || './whatsapp-session';
+
+if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+  console.error('Missing required env vars: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+  process.exit(1);
+}
+
+function buildPuppeteerConfig() {
+  const config = {
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-gpu',
+      '--disable-dev-shm-usage',
+    ],
+  };
+  if (process.platform === 'darwin') {
+    config.executablePath =
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  } else if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    config.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  return config;
+}
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -28,12 +53,8 @@ let qrCodeData = null;
 let connectedNumber = null;
 
 const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: './whatsapp-session' }),
-  puppeteer: {
-    headless: true,
-    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
-  },
+  authStrategy: new LocalAuth({ dataPath: SESSION_PATH }),
+  puppeteer: buildPuppeteerConfig(),
 });
 
 client.on('qr', (qr) => {
@@ -43,7 +64,7 @@ client.on('qr', (qr) => {
   console.log('  SCAN THIS QR CODE WITH WHATSAPP');
   console.log('========================================\n');
   qrcode.generate(qr, { small: true });
-  console.log('\nOr open http://localhost:' + PORT + '/qr in your browser\n');
+  console.log('\nOr open /qr on your bot server (port ' + PORT + ')\n');
 });
 
 client.on('ready', () => {
@@ -323,11 +344,11 @@ async function setupCron() {
 // ============================================================
 // START
 // ============================================================
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n=== Tirtam WhatsApp Bot ===`);
-  console.log(`API server running on http://localhost:${PORT}`);
-  console.log(`QR code page: http://localhost:${PORT}/qr`);
-  console.log(`Status: http://localhost:${PORT}/status\n`);
+  console.log(`API server listening on port ${PORT}`);
+  console.log(`QR code page: /qr`);
+  console.log(`Status: /status\n`);
   console.log('Initializing WhatsApp client...\n');
 
   client.initialize();

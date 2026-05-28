@@ -3,7 +3,7 @@ import { useStore } from '../store/useStore';
 import { generateWhatsAppSummary } from '../utils/helpers';
 import { MessageSquare, Send, Clock, Copy, Check, Smartphone, Settings, Zap, Wifi, WifiOff, QrCode, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 
-const BOT_URL = 'http://localhost:3001';
+const BOT_URL = import.meta.env.VITE_WHATSAPP_BOT_URL || 'http://localhost:3001';
 
 interface BotStatus {
   whatsapp: string;
