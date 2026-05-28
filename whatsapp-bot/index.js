@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const express = require('express');
@@ -7,6 +9,47 @@ const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 const https = require('https');
 const http = require('http');
+
+const CHROMIUM_LOCK_FILES = new Set([
+  'SingletonLock',
+  'SingletonSocket',
+  'SingletonCookie',
+  'DevToolsActivePort',
+]);
+
+/** Remove stale Chromium locks after container crash/restart (Railway volume). */
+function clearStaleChromiumLocks(dir) {
+  if (!fs.existsSync(dir)) return;
+
+  let cleared = 0;
+  const walk = (current) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (CHROMIUM_LOCK_FILES.has(entry.name)) {
+        try {
+          fs.unlinkSync(full);
+          cleared += 1;
+          console.log(`Removed stale Chromium lock: ${full}`);
+        } catch (err) {
+          console.warn(`Could not remove ${full}:`, err.message);
+        }
+      }
+    }
+  };
+
+  walk(dir);
+  if (cleared > 0) {
+    console.log(`Cleared ${cleared} stale Chromium lock file(s) under ${dir}`);
+  }
+}
 
 // ============================================================
 // CONFIG
@@ -29,6 +72,7 @@ function buildPuppeteerConfig() {
       '--disable-setuid-sandbox',
       '--disable-gpu',
       '--disable-dev-shm-usage',
+      '--disable-features=ChromeProcessSingleton',
     ],
   };
   if (process.platform === 'darwin') {
@@ -89,6 +133,22 @@ client.on('disconnected', (reason) => {
   whatsappStatus = 'disconnected';
   connectedNumber = null;
 });
+
+let shuttingDown = false;
+async function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n${signal} received — shutting down WhatsApp client...`);
+  try {
+    await client.destroy();
+  } catch (err) {
+    console.warn('Error during client.destroy():', err.message);
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // ============================================================
 // LOGO
@@ -351,6 +411,10 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Status: /status\n`);
   console.log('Initializing WhatsApp client...\n');
 
-  client.initialize();
+  clearStaleChromiumLocks(SESSION_PATH);
+  client.initialize().catch((err) => {
+    console.error('WhatsApp client failed to start:', err.message);
+    whatsappStatus = 'error';
+  });
   setupCron();
 });

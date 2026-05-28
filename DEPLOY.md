@@ -186,9 +186,10 @@ Local bot URL: `http://localhost:3001` (default in frontend if `VITE_WHATSAPP_BO
 
 | Issue | Fix |
 |-------|-----|
-| Bot shows Offline in dashboard | Check `VITE_WHATSAPP_BOT_URL`, Railway domain, and CORS (bot allows all origins via `cors()`) |
+| Bot shows Offline in dashboard | Check `VITE_WHATSAPP_BOT_URL` on Vercel (must redeploy after setting), Railway domain, and that `/status` returns JSON (not 502) |
+| `profile appears to be in use by another Chromium process` | Crash loop: stale lock on the volume. Push latest `whatsapp-bot/index.js` (clears locks on start), ensure **1 replica**, redeploy once. If still failing: stop service → redeploy. Last resort: clear volume and scan QR again at `/qr` |
 | QR keeps appearing | Volume not mounted or wrong `WHATSAPP_SESSION_PATH` |
-| Chrome / Puppeteer errors in Railway logs | Rebuild Docker image; confirm `PUPPETEER_EXECUTABLE_PATH` |
+| Chrome / Puppeteer errors in Railway logs | Rebuild Docker image; confirm `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium` |
 | Missing env on startup | Bot exits with message if `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` missing |
 | `whatsapp-bot/railway.json` not found | Root is already `whatsapp-bot` → set Config file to `railway.json` or blank, not `whatsapp-bot/railway.json` |
 | Group not found | Use `/groups` endpoint or pick group name from dashboard after connect |
